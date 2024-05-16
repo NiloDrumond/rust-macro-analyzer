@@ -1,0 +1,21 @@
+query ReposQuery($qstr: String!, $first: Int!, $after: String) {
+  search(query: $qstr, type: REPOSITORY, first: $first, after: $after) {
+    repositoryCount
+    nodes {
+      __typename
+      ... on Repository {
+        nameWithOwner
+        name
+        id
+        owner {
+          __typename
+          login
+        }
+        url
+        stargazers {
+          totalCount
+        }
+      }
+    }
+  }
+}

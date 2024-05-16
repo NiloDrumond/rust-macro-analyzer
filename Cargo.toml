@@ -1,0 +1,13 @@
+[package]
+name = "rust-macros-scraper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.37.0", features = ["full"] }
+reqwest = { version = "0.12.4", features = ['json'] }
+graphql_client = { version = "0.14" }
+serde = { version = "1.0.201", features = ['derive'] }
+ron = { version = "0.8.1" }
+toml = { version = "0.8.12" }
+chrono = { version = "0.4.38", features = ['serde'] }
