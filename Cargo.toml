@@ -11,3 +11,8 @@ serde = { version = "1.0.201", features = ['derive'] }
 ron = { version = "0.8.1" }
 toml = { version = "0.8.12" }
 chrono = { version = "0.4.38", features = ['serde'] }
+tree-sitter = { version = "0.22.6" }
+tree-sitter-rust = { version = "0.21.2" }
+
+[build-dependencies]
+cc="*"
