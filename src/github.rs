@@ -1,6 +1,6 @@
 use crate::ScraperState;
 use crate::{utils::pretty_print, JoinHandle};
-use chrono::Utc;
+use chrono::Local;
 use graphql_client::{GraphQLQuery, Response};
 use reqwest::{header, Client};
 use std::{
@@ -94,7 +94,7 @@ async fn fetch_most_popular_repos(
     let data = response_body.data.unwrap();
     let ron_string = ron::ser::to_string_pretty(&data, ron::ser::PrettyConfig::default())?;
     let mut file = File::create(REPOS_PATH)?;
-    state.repos_query_at = Some(Utc::now());
+    state.repos_query_at = Some(Local::now());
     state.save()?;
     file.write_all(ron_string.as_bytes())?;
     Ok(data.into())
@@ -121,6 +121,9 @@ async fn clone_repo(repository: Repository) -> Result<(), Box<dyn Error + Send +
     let path = Path::new(CLONED_REPOS_PATH).join(output_folder_name);
     let output = tokio::process::Command::new("git")
         .arg("clone")
+        // https://stackoverflow.com/questions/3796927/how-do-i-git-clone-a-repo-including-its-submodules
+        .arg("--recurse-submodules")
+        .arg("-j8")
         .arg(repository.url)
         .arg(path)
         .stdout(std::io::stdout())
@@ -137,6 +140,14 @@ pub async fn clone_repos(
     state: &mut ScraperState,
     repositories: Vec<Repository>,
 ) -> Result<String, Box<dyn Error>> {
+    if state.cloned_repos_at.is_some() {
+        pretty_print(
+            "Repos already cloned at",
+            Some(&state.cloned_repos_at),
+        );
+        return Ok(CLONED_REPOS_PATH.to_string());
+    }
+
     let mut handles: Vec<JoinHandle<Result<(), Box<dyn Error + Send + Sync>>>> = Vec::new();
     pretty_print("Starting to clone repositores", None);
     for repository in repositories {
@@ -148,7 +159,7 @@ pub async fn clone_repos(
             println!("Failed to clone: {}", err)
         }
     }
-    state.cloned_repos_at = Some(Utc::now());
+    state.cloned_repos_at = Some(Local::now());
     state.save()?;
     pretty_print("Repositories cloned", None);
     Ok(CLONED_REPOS_PATH.to_string())

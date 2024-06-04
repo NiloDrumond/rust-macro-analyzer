@@ -3,7 +3,7 @@ use std::fmt::Debug;
 macro_rules! impl_save_load {
     ($struct_name:ident, $path:expr) => {
         impl $struct_name {
-            pub fn save(&self) -> Result<(), Box<dyn Error>> {
+            pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
                 let mut file = std::fs::File::create($path)?;
                 let ron_string =
                     ron::ser::to_string_pretty(&self, ron::ser::PrettyConfig::default())?;

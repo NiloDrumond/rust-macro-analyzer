@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use tree_sitter::{Node, Parser};
 
@@ -46,7 +46,7 @@ fn count_chars(root: Node, bytes: &[u8]) -> usize {
     count
 }
 
-fn count(path: String) -> usize {
+fn count(path: Path) -> usize {
     let mut parser = Parser::new();
     parser
         .set_language(&tree_sitter_rust::language())
@@ -98,7 +98,7 @@ fn _count_lines(path: String) {
     println!("line count: {}", line_count)
 }
 
-pub fn test_parser() {
-    let count = count(SOURCE_PATH.to_string());
-    println!("{:?}", count);
-}
+// pub fn test_parser() {
+//     let count = count(SOURCE_PATH.to_string());
+//     println!("{:?}", count);
+// }

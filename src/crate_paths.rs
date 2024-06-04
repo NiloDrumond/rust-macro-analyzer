@@ -1,5 +1,5 @@
-use std::{error::Error, fs};
 use serde::{Deserialize, Serialize};
+use std::{error::Error, fs};
 
 use crate::{state::ScraperState, utils::pretty_print};
 const CRATE_PATHS_PATH: &str = "./data/crates.ron";
@@ -37,6 +37,12 @@ impl<'a> IntoIterator for &'a CratePaths {
     }
 }
 impl_save_load!(CratePaths, CRATE_PATHS_PATH);
+
+pub fn get_repo_path(crate_path: &str) -> String {
+    let path_parts: Vec<&str> = crate_path.split('/').collect();
+    let repo_path = &path_parts[0..4].join("/");
+    repo_path.to_string()
+}
 
 pub fn find_project_crates(root_dir: &std::path::Path) -> CratePaths {
     let mut crate_paths = Vec::new();
