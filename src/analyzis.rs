@@ -57,74 +57,11 @@ impl AttributeMacroUsage {
             self.0.insert("rustfmt::".to_string(), prev + 1);
             return Some(());
         }
-
-        update_field_if_condition!(self, value, conditional_compilation, "cfg", "cfg_attr");
-        update_field_if_condition!(self, value, testing, "test", "ignore", "should_panic");
-        update_field_if_condition!(self, value, derive, "derive", "automatically_derived");
-        update_field_if_condition!(
-            self,
-            value,
-            macros,
-            "macro_export",
-            "macro_use",
-            "proc_macro",
-            "proc_macro_derive",
-            "proc_macro_attribute"
-        );
-        update_field_if_condition!(
-            self,
-            value,
-            diagnostics,
-            "allow",
-            "warn",
-            "deny",
-            "forbid",
-            "deprecated",
-            "must_use"
-        );
-        update_field_if_condition!(
-            self,
-            value,
-            abi_linking,
-            "link",
-            "link_name",
-            "link_ordinal",
-            "no_link",
-            "repr",
-            "crate_type",
-            "no_main",
-            "export_name",
-            "link_section",
-            "no_mangle",
-            "used",
-            "crate_name"
-        );
-        update_field_if_condition!(
-            self,
-            value,
-            code_generation,
-            "inline",
-            "cold",
-            "no_builtins",
-            "target_feature",
-            "track_caller",
-            "instruction_set"
-        );
-        update_field_if_condition!(self, value, documentation, "doc");
-        update_field_if_condition!(self, value, preludes, "no_std", "no_implicit_prelude");
-        update_field_if_condition!(self, value, modules, "path");
-        update_field_if_condition!(self, value, limits, "recursion_limit", "type_length_limit");
-        update_field_if_condition!(
-            self,
-            value,
-            runtime,
-            "panic_handler",
-            "global_allocator",
-            "windows_subsystem"
-        );
-        update_field_if_condition!(self, value, features, "feature");
-        update_field_if_condition!(self, value, type_system, "non_exhaustive");
-        update_field_if_condition!(self, value, debugger, "debugger_visualizer");
+        if BUILTIN_ATTRIBUTES.iter().any(|v| *v == value) {
+            let prev = self.0.get(value).unwrap_or(&0);
+            self.0.insert(value.to_string(), prev + 1);
+            return Some(());
+        }
         None
     }
 }
@@ -133,24 +70,14 @@ impl std::ops::Add for AttributeMacroUsage {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            conditional_compilation: self.conditional_compilation + rhs.conditional_compilation,
-            tools: self.tools + rhs.tools,
-            testing: self.testing + rhs.testing,
-            derive: self.derive + rhs.derive,
-            macros: self.macros + rhs.macros,
-            diagnostics: self.diagnostics + rhs.diagnostics,
-            abi_linking: self.abi_linking + rhs.abi_linking,
-            code_generation: self.code_generation + rhs.code_generation,
-            documentation: self.documentation + rhs.documentation,
-            preludes: self.preludes + rhs.preludes,
-            modules: self.modules + rhs.modules,
-            limits: self.limits + rhs.limits,
-            runtime: self.runtime + rhs.runtime,
-            features: self.features + rhs.features,
-            type_system: self.type_system + rhs.type_system,
-            debugger: self.debugger + rhs.debugger,
+        let mut result = self.0.clone(); // Start with a clone of map1
+
+        for (key, value) in rhs.0 {
+            // Update the value for the key in the result map, or insert the key-value pair if it doesn't exist
+            *result.entry(key).or_insert(0) += value;
         }
+
+        Self(result)
     }
 }
 
@@ -255,7 +182,6 @@ fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
                 analyzis.derive_macro_usage.add_point(derive_count);
             }
             if value == "cfg" || value == "cfg_attr" {
-                analyzis.attribute_macro_usage.conditional_compilation += 1;
                 // TODO: tratar caso de target_os
                 // https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg_attr-attribute
                 let token_tree = attribute.child(1);
@@ -271,7 +197,6 @@ fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
                     }
                 }
             }
-
         }
         if node.child_count() > 0 {
             let res = count_macro_usage(node, bytes)?;
