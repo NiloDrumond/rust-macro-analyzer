@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
-    analyzis::MacroUsageAnalyzis,
+    analyzis::MacroAnalyzis,
     crate_paths::{get_repo_path, CratePaths},
 };
 
@@ -16,7 +16,7 @@ pub struct CrateAnalyzis {
     pub path: CratePath,
     pub char_count: Option<usize>,
     pub expanded_char_count: Option<Result<usize, String>>,
-    pub macro_usage: Option<MacroUsageAnalyzis>,
+    pub macro_usage: Option<MacroAnalyzis>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -25,7 +25,7 @@ pub struct RepoAnalyzis {
     pub crates_count: usize,
     pub char_count: Option<usize>,
     pub expanded_char_count: Option<Result<usize, usize>>,
-    pub macro_usage: Option<MacroUsageAnalyzis>,
+    pub macro_usage: Option<MacroAnalyzis>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]

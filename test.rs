@@ -1,6 +1,5 @@
-use proc_macro_examples::make_answer;
 
-fn main() {
-    test!();
-    make_answer!();
+#[proc_macro]
+pub fn make_answer(_item: TokenStream) -> TokenStream {
+    "fn answer() -> u32 { 42 }".parse().unwrap()
 }
