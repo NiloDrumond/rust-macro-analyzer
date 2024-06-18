@@ -260,17 +260,6 @@ pub fn analyze_crates(
     state: &mut ScraperState,
     results: &mut AnalyzisResults,
 ) -> Result<(), Error> {
-    // let result = count_dir_macro_usage(Path::new("./data/repos/rust-lang.rust/src/tools/rls"));
-    // println!("result: {:?}", result);
-    // return Ok(());
-
-    // let string = fs::read_to_string(Path::new("./test.rs")).unwrap();
-    // let bytes = string.as_bytes();
-    // let tree = parse_file(bytes);
-    // let result = count_macro_usage(tree.root_node(), bytes);
-    // println!("result: {:?}", result);
-    // return Ok(());
-
     for crate_path in results.crates.clone().keys() {
         let repo_path = get_repo_path(crate_path);
         let analyzis = count_dir_macro_usage(Path::new(&crate_path))?;
@@ -284,6 +273,5 @@ pub fn analyze_crates(
         })
     }
 
-    // state.counted_expanded_chars_at = Some(Local::now());
     Ok(())
 }
