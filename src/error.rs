@@ -7,6 +7,7 @@ pub struct Error {
 #[derive(Clone, Debug)]
 pub enum ErrorMessage {
     DeriveMacroExpectedTokenTree,
+    FailedToReadDirectory,
 }
 
 impl std::fmt::Display for Error {

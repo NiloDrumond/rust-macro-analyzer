@@ -11,11 +11,29 @@ const RESULTS_PATH: &str = "./data/analyzis.ron";
 type RepoPath = String;
 type CratePath = String;
 
+#[derive(Serialize, Deserialize, Default, Debug, Clone, Copy)]
+// (Characters, Lines)
+pub struct CharLineCount(pub usize, pub usize);
+impl std::ops::AddAssign for CharLineCount {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
+        self.1 += rhs.1;
+    }
+}
+
+impl std::ops::Add for CharLineCount {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct CrateAnalyzis {
     pub path: CratePath,
-    pub char_count: Option<usize>,
-    pub expanded_char_count: Option<Result<usize, String>>,
+    pub source_count: Option<CharLineCount>,
+    pub expanded_count: Option<Result<CharLineCount, String>>,
     pub macro_usage: Option<MacroAnalyzis>,
 }
 
@@ -23,8 +41,8 @@ pub struct CrateAnalyzis {
 pub struct RepoAnalyzis {
     pub path: RepoPath,
     pub crates_count: usize,
-    pub char_count: Option<usize>,
-    pub expanded_char_count: Option<Result<usize, usize>>,
+    pub source_count: Option<CharLineCount>,
+    pub expanded_count: Option<Result<CharLineCount, usize>>,
     pub macro_usage: Option<MacroAnalyzis>,
 }
 

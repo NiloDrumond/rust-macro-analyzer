@@ -3,6 +3,8 @@ use crate::{utils::pretty_print, JoinHandle};
 use chrono::Local;
 use graphql_client::{GraphQLQuery, Response};
 use reqwest::{header, Client};
+use tokio::sync::Semaphore;
+use std::sync::Arc;
 use std::{
     error::Error,
     fs::File,
@@ -16,6 +18,8 @@ const USER_AGENT: &str = "NiloDrumond (https://github.com/NiloDrumond)";
 const REPOS_PATH: &str = "./data/repos.ron";
 const CLONED_REPOS_PATH: &str = "./data/repos";
 const REPOS_TO_FETCH: i64 = 10;
+
+const WORKER_POOL_SIZE: usize = 20;
 
 #[allow(clippy::upper_case_acronyms)]
 type URI = String;
@@ -148,17 +152,29 @@ pub async fn clone_repos(
         return Ok(CLONED_REPOS_PATH.to_string());
     }
 
-    let mut handles: Vec<JoinHandle<Result<(), Box<dyn Error + Send + Sync>>>> = Vec::new();
-    pretty_print("Starting to clone repositores", None);
-    for repository in repositories {
-        let handle = task::spawn(clone_repo(repository));
-        handles.push(handle);
-    }
-    for handle in handles {
-        if let Err(err) = handle.await {
+    let semaphore = Arc::new(Semaphore::new(WORKER_POOL_SIZE));
+
+    let tasks: Vec<_> = repositories.into_iter()
+        .map(|repository| {
+            let semaphore_clone = semaphore.clone();
+
+            async move {
+                let _permit = semaphore_clone
+                    .acquire()
+                    .await
+                    .unwrap_or_else(|_| panic!("Failed to acquire permit"));
+
+                clone_repo(repository).await
+            }
+        })
+        .collect();
+
+    for task in tasks {
+        if let Err(err) = task.await {
             println!("Failed to clone: {}", err)
         }
     }
+
     state.cloned_repos_at = Some(Local::now());
     state.save()?;
     pretty_print("Repositories cloned", None);

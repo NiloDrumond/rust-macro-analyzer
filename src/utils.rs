@@ -1,5 +1,30 @@
 use std::fmt::Debug;
 
+use tree_sitter::{Parser, Tree};
+
+pub fn parse_file(bytes: &[u8]) -> Tree {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_rust::language())
+        .expect("Error loading Rust grammar");
+    parser.parse(bytes, None).expect("Failed to parse file")
+}
+
+pub fn remove_data_prefix(s: &str) -> String {
+    let prefixes = ["./data/repos/", "data/repos/"];
+    
+    for prefix in &prefixes {
+        match s.starts_with(prefix) {
+            true => {
+                return s[prefix.len()..].to_owned();
+            }
+            false => (),
+        }
+    }
+    
+    s.to_owned()
+}
+
 macro_rules! impl_save_load {
     ($struct_name:ident, $path:expr) => {
         impl $struct_name {

@@ -1,15 +1,11 @@
 use crate::{
-    crate_paths::get_repo_path,
-    results::AnalyzisResults,
-    state::ScraperState,
-    utils::pretty_print,
+    crate_paths::get_repo_path, results::AnalyzisResults, state::ScraperState, utils::pretty_print,
 };
 use chrono::Local;
-use std::{error::Error, path::Path};
-use tokio::{
-    io::AsyncWriteExt,
-    task::{self, JoinHandle},
-};
+use std::{error::Error, path::Path, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
+use tokio::{io::AsyncWriteExt, sync::Semaphore};
+
+const WORKER_POOL_SIZE: usize = 20;
 
 async fn expand_crate(path: String) -> Result<(), String> {
     let cargo_path = Path::new(&path).join("Cargo.toml");
@@ -18,6 +14,7 @@ async fn expand_crate(path: String) -> Result<(), String> {
     let output = tokio::process::Command::new("cargo")
         .arg("+nightly")
         .arg("expand")
+        // .arg("--no-default-features")
         .arg("--manifest-path")
         .arg(&cargo_path)
         .output()
@@ -56,30 +53,43 @@ pub async fn expand_crates(
         return Ok(());
     }
 
-    let mut handles: Vec<JoinHandle<(String, Result<(), String>)>> = Vec::new();
-    for path in results.crates.clone().keys() {
-        let handle = task::spawn(expand_crate_task(path.to_string()));
-        handles.push(handle);
-    }
-    for handle in handles {
-        match handle.await {
-            Ok(result) => {
-                if let Err(err) = result.1 {
-                    results.update_crate(&result.0, &mut |crate_analyzis| {
-                        crate_analyzis.expanded_char_count = Some(Err(err.to_string()));
-                    });
+    let semaphore = Arc::new(Semaphore::new(WORKER_POOL_SIZE));
 
-                    let repo_path = get_repo_path(&result.0);
-                    results.update_repo(&repo_path, &mut |repo_analyzis| {
-                        if let Some(Err(prev)) = repo_analyzis.expanded_char_count {
-                            repo_analyzis.expanded_char_count = Some(Err(prev + 1));
-                        } else {
-                            repo_analyzis.expanded_char_count = Some(Err(1));
-                        }
-                    })
-                }
+    let counter = Arc::new(AtomicUsize::new(0));
+    let crates = results.crates.keys().cloned();
+    let tasks: Vec<_> = crates
+        .map(|path| {
+            let semaphore_clone = semaphore.clone();
+            let counter_clone = counter.clone();
+
+            async move {
+                let _permit = semaphore_clone
+                    .acquire()
+                    .await
+                    .unwrap_or_else(|_| panic!("Failed to acquire permit"));
+                let count = counter_clone.fetch_add(1, Ordering::Relaxed);
+                pretty_print("Expanded crates", Some(&count));
+                pretty_print("Expanding crate", Some(&path.to_string()));
+                expand_crate_task(path.to_string()).await
             }
-            Err(e) => println!("Task failed to start: {:?}", e),
+        })
+        .collect();
+
+    for task in tasks {
+        let result = task.await;
+        if let Err(err) = result.1 {
+            results.update_crate(&result.0, &mut |crate_analyzis| {
+                crate_analyzis.expanded_count = Some(Err(err.to_string()));
+            });
+
+            let repo_path = get_repo_path(&result.0);
+            results.update_repo(&repo_path, &mut |repo_analyzis| {
+                if let Some(Err(prev)) = repo_analyzis.expanded_count {
+                    repo_analyzis.expanded_count = Some(Err(prev + 1));
+                } else {
+                    repo_analyzis.expanded_count = Some(Err(1));
+                }
+            })
         }
     }
 

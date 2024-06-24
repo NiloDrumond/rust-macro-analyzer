@@ -1,3 +1,4 @@
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fs};
 
@@ -49,7 +50,12 @@ pub fn find_project_crates(root_dir: &std::path::Path) -> CratePaths {
 
     // Read the Cargo.toml file at the root directory
     let cargo_toml_path = root_dir.join("Cargo.toml");
-    let cargo_toml = fs::read_to_string(cargo_toml_path).unwrap_or_default();
+    let cargo_toml = match fs::read_to_string(cargo_toml_path) {
+        Ok(content) => content,
+        Err(_no_file) => {
+            return CratePaths(vec![]);
+        }
+    };
     let cargo_toml: CargoToml = toml::from_str(&cargo_toml).unwrap_or_default();
 
     // Check if the root directory is a crate or a workspace
@@ -60,7 +66,27 @@ pub fn find_project_crates(root_dir: &std::path::Path) -> CratePaths {
         // If it's a workspace, read the members field to get the paths to the crates inside that workspace
         if let Some(workspace) = &cargo_toml.workspace {
             for member in &workspace.members {
-                crate_paths.extend(find_project_crates(&root_dir.join(member)).0);
+                if member == "." {
+                    for entry in fs::read_dir(root_dir).unwrap() {
+                        let entry = entry.unwrap();
+                        let path = entry.path();
+
+                        if path.is_dir() {
+                            crate_paths.extend(find_project_crates(&path).0);
+                        }
+                    }
+                } else if member.find('*').is_some() {
+                    if let Ok(glob) = glob::glob(&format!("{}/{}", root_dir.display(), member)) {
+                        for entry in glob {
+                            let entry = entry.unwrap();
+                            if entry.is_dir() {
+                                crate_paths.extend(find_project_crates(entry.as_path()).0);
+                            }
+                        }
+                    }
+                } else {
+                    crate_paths.extend(find_project_crates(&root_dir.join(member)).0);
+                }
             }
         }
     }
@@ -69,12 +95,12 @@ pub fn find_project_crates(root_dir: &std::path::Path) -> CratePaths {
 }
 
 pub fn find_crate_paths(
-    state: &ScraperState,
+    state: &mut ScraperState,
     root_dir: &std::path::Path,
 ) -> Result<CratePaths, Box<dyn Error>> {
-    if state.repos_query_at.is_some() {
+    if state.crates_parsed_at.is_some() {
         if let Some(data) = CratePaths::load() {
-            pretty_print("Crates found", Some(&data.0.len()));
+            pretty_print("Crates already parsed at", Some(&data.0.len()));
             return Ok(data);
         }
     }
@@ -94,6 +120,7 @@ pub fn find_crate_paths(
     }
 
     all_crate_paths.save()?;
+    state.crates_parsed_at = Some(Local::now());
     pretty_print("Crates found", Some(&all_crate_paths.0.len()));
     Ok(all_crate_paths)
 }

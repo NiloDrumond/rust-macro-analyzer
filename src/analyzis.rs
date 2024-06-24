@@ -5,10 +5,10 @@ use crate::{
     error::{Error, ErrorMessage},
     results::AnalyzisResults,
     state::ScraperState,
-    utils::{BUILTIN_ATTRIBUTES, FOLDERS_TO_IGNORE},
+    utils::{parse_file, BUILTIN_ATTRIBUTES, FOLDERS_TO_IGNORE},
 };
 use serde::{Deserialize, Serialize};
-use tree_sitter::{Node, Parser, Tree};
+use tree_sitter::Node;
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 struct DeriveMacroUsage {
@@ -181,22 +181,6 @@ fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
                     .count();
                 analyzis.derive_macro_usage.add_point(derive_count);
             }
-            if value == "cfg" || value == "cfg_attr" {
-                // TODO: tratar caso de target_os
-                // https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg_attr-attribute
-                let token_tree = attribute.child(1);
-                if let Some(token_tree) = token_tree {
-                    if token_tree.child_count() > 1 {
-                        let identifier = token_tree.child(1).unwrap();
-                        let value = &bytes[identifier.byte_range()];
-                        let value = String::from_utf8(value.to_vec()).unwrap();
-                        if value == "test" || value == "windows" {
-                            ignore_next = true;
-                            continue;
-                        }
-                    }
-                }
-            }
         }
         if node.child_count() > 0 {
             let res = count_macro_usage(node, bytes)?;
@@ -207,20 +191,14 @@ fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
     Ok(analyzis)
 }
 
-fn parse_file(bytes: &[u8]) -> Tree {
-    let mut parser = Parser::new();
-    parser
-        .set_language(&tree_sitter_rust::language())
-        .expect("Error loading Rust grammar");
-    parser.parse(bytes, None).expect("Failed to parse file")
-}
-
 fn count_dir_macro_usage(path: &Path) -> Result<MacroAnalyzis, Error> {
     let mut analyzis = MacroAnalyzis::default();
     let ignore = FOLDERS_TO_IGNORE.map(std::ffi::OsStr::new);
-    for entry in
-        fs::read_dir(path).unwrap_or_else(|_| panic!("Failed to read directory {:?}", path))
-    {
+    let entries = fs::read_dir(path).map_err(|_| Error {
+        path: Some(path.display().to_string()),
+        message: ErrorMessage::FailedToReadDirectory,
+    })?;
+    for entry in entries {
         let entry = entry.unwrap();
         let path = entry.path();
         let name = entry.file_name();
