@@ -31,7 +31,6 @@ impl std::ops::Add for CharLineCount {
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct CrateAnalyzis {
-    pub path: CratePath,
     pub source_count: Option<CharLineCount>,
     pub expanded_count: Option<Result<CharLineCount, String>>,
     pub macro_usage: Option<MacroAnalyzis>,
@@ -60,7 +59,6 @@ impl From<&CratePaths> for AnalyzisResults {
             crates.insert(
                 path.to_string(),
                 CrateAnalyzis {
-                    path: path.to_string(),
                     ..Default::default()
                 },
             );

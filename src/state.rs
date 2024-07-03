@@ -12,6 +12,7 @@ pub struct ScraperState {
     pub cloned_repos_at: Option<DateTime<Local>>,
     pub counted_code_at: Option<DateTime<Local>>,
     pub expanded_macros_at: Option<DateTime<Local>>,
+    pub analyzed_macros_at: Option<DateTime<Local>>,
     pub counted_expanded_chars_at: Option<DateTime<Local>>,
     pub cleared_cfg_at: Option<DateTime<Local>>
 }

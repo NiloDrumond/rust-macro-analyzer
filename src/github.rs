@@ -1,9 +1,8 @@
+use crate::utils::pretty_print;
 use crate::ScraperState;
-use crate::{utils::pretty_print, JoinHandle};
 use chrono::Local;
 use graphql_client::{GraphQLQuery, Response};
 use reqwest::{header, Client};
-use tokio::sync::Semaphore;
 use std::sync::Arc;
 use std::{
     error::Error,
@@ -11,7 +10,7 @@ use std::{
     io::{Read, Write},
     path::Path,
 };
-use tokio::task;
+use tokio::sync::Semaphore;
 
 const GRAPHQL_URL: &str = "https://api.github.com/graphql";
 const USER_AGENT: &str = "NiloDrumond (https://github.com/NiloDrumond)";
@@ -19,7 +18,7 @@ const REPOS_PATH: &str = "./data/repos.ron";
 const CLONED_REPOS_PATH: &str = "./data/repos";
 const REPOS_TO_FETCH: i64 = 10;
 
-const WORKER_POOL_SIZE: usize = 20;
+const WORKER_POOL_SIZE: usize = 30;
 
 #[allow(clippy::upper_case_acronyms)]
 type URI = String;
@@ -145,16 +144,14 @@ pub async fn clone_repos(
     repositories: Vec<Repository>,
 ) -> Result<String, Box<dyn Error>> {
     if state.cloned_repos_at.is_some() {
-        pretty_print(
-            "Repos already cloned at",
-            Some(&state.cloned_repos_at),
-        );
+        pretty_print("Repos already cloned at", Some(&state.cloned_repos_at));
         return Ok(CLONED_REPOS_PATH.to_string());
     }
 
     let semaphore = Arc::new(Semaphore::new(WORKER_POOL_SIZE));
 
-    let tasks: Vec<_> = repositories.into_iter()
+    let tasks: Vec<_> = repositories
+        .into_iter()
         .map(|repository| {
             let semaphore_clone = semaphore.clone();
 

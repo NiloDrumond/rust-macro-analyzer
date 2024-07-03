@@ -10,6 +10,7 @@ use std::{
 use tree_sitter::{Node, Parser};
 
 use crate::{
+    crate_paths::CratePaths,
     results::AnalyzisResults,
     state::ScraperState,
     utils::{pretty_print, remove_data_prefix},
@@ -118,19 +119,19 @@ fn get_cfg_ranges(
     Ok(())
 }
 
-fn get_crates_cfg_ranges(results: &AnalyzisResults) -> Result<RangesToRemove, Box<dyn Error>> {
+fn get_crates_cfg_ranges(crate_paths: &CratePaths) -> Result<RangesToRemove, Box<dyn Error>> {
     let mut ranges_to_remove = RangesToRemove::load().unwrap_or_default();
-    for crate_path in results.crates.clone().keys() {
-        match get_cfg_ranges(Path::new(&crate_path), &mut ranges_to_remove) {
+    for crate_path in crate_paths {
+        let crate_path = Path::new("./data/repos").join(crate_path);
+        match get_cfg_ranges(&crate_path, &mut ranges_to_remove) {
             Ok(_) => {}
             Err(e) => {
-                println!("Failed to count {}: {}", crate_path, e);
+                println!("Failed to parse {:?}: {}", crate_path, e);
             }
         }
     }
 
     ranges_to_remove.save()?;
-    pretty_print("Characters and lines counted", None);
     Ok(ranges_to_remove)
 }
 
@@ -194,14 +195,14 @@ fn parse_repositories(ranges_to_remove: &RangesToRemove) -> Result<(), Box<dyn E
     let source_dir = Path::new("data/repos");
     let dest_dir = Path::new("data/parsed_repos");
 
-    process_directory(source_dir, dest_dir, &ranges_to_remove)?;
+    process_directory(source_dir, dest_dir, ranges_to_remove)?;
 
     Ok(())
 }
 
 pub fn clear_conditional_compilation(
     state: &mut ScraperState,
-    results: &AnalyzisResults,
+    crate_paths: &CratePaths,
 ) -> Result<(), Box<dyn Error>> {
     if state.cleared_cfg_at.is_some() {
         pretty_print(
@@ -210,8 +211,9 @@ pub fn clear_conditional_compilation(
         );
         return Ok(());
     }
-    let ranges = get_crates_cfg_ranges(results)?;
-    parse_repositories(&ranges);
+
+    let ranges = get_crates_cfg_ranges(crate_paths)?;
+    parse_repositories(&ranges)?;
 
     pretty_print("Copied repos while clearing conditional compilation", None);
     state.cleared_cfg_at = Some(Local::now());

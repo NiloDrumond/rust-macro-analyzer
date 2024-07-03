@@ -3,20 +3,17 @@ use std::{error::Error, fs, path::Path};
 use tree_sitter::{Node, Parser};
 
 use crate::{
-    clear_cfg::{Range, RangesToRemove},
     crate_paths::get_repo_path,
     results::{AnalyzisResults, CharLineCount},
     state::ScraperState,
-    utils::{pretty_print, remove_data_prefix},
+    utils::pretty_print,
 };
 
-fn count_chars(root: Node, bytes: &[u8]) -> (usize, Vec<Range>) {
+fn count_chars(root: Node, bytes: &[u8]) -> usize {
     let mut count = 0;
-    let mut ranges_to_remove: Vec<Range> = vec![];
     let mut ignore_next = false;
     for node in root.children(&mut root.walk()) {
         if ignore_next {
-            ranges_to_remove.push(node.range().into());
             ignore_next = false;
             continue;
         }
@@ -38,7 +35,6 @@ fn count_chars(root: Node, bytes: &[u8]) -> (usize, Vec<Range>) {
             // https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg-macro
             if value == "cfg" || value == "cfg_attr" {
                 ignore_next = true;
-                ranges_to_remove.push(node.range().into());
                 continue;
             }
         }
@@ -50,16 +46,15 @@ fn count_chars(root: Node, bytes: &[u8]) -> (usize, Vec<Range>) {
             let space_chars = value.iter().filter(|&&b| b == b' ').count();
             count += total_chars - space_chars;
         } else if node.child_count() > 0 {
-            let (c, ranges) = count_chars(node, bytes);
+            let c = count_chars(node, bytes);
             count += c;
-            ranges_to_remove.extend(ranges)
         }
     }
 
-    (count, ranges_to_remove)
+    count
 }
 
-pub fn count_file_code(bytes: &[u8]) -> Result<(CharLineCount, Vec<Range>), Box<dyn Error>> {
+pub fn count_file_code(bytes: &[u8]) -> Result<CharLineCount, Box<dyn Error>> {
     let mut parser = Parser::new();
     parser
         .set_language(&tree_sitter_rust::language())
@@ -69,25 +64,22 @@ pub fn count_file_code(bytes: &[u8]) -> Result<(CharLineCount, Vec<Range>), Box<
     match tree {
         Some(tree) => {
             let line_count = tree.root_node().range().end_point.row;
-            let (char_count, ranges_to_remove) = count_chars(tree.root_node(), bytes);
+            let char_count = count_chars(tree.root_node(), bytes);
 
-            Ok((CharLineCount(char_count, line_count), ranges_to_remove))
+            Ok(CharLineCount(char_count, line_count))
         }
         None => Err("Failed to parse file".into()),
     }
 }
 
-fn count_dir_code(
-    path: &Path,
-    ranges_to_remove: &mut RangesToRemove,
-) -> Result<CharLineCount, Box<dyn Error>> {
+fn count_dir_code(path: &Path) -> Result<CharLineCount, Box<dyn Error>> {
     let mut count = CharLineCount(0, 0);
     for entry in fs::read_dir(path)? {
         let entry = entry.unwrap();
         let path = entry.path();
 
         if path.is_dir() {
-            count += count_dir_code(&path, ranges_to_remove)?;
+            count += count_dir_code(&path)?;
             continue;
         }
 
@@ -98,9 +90,7 @@ fn count_dir_code(
             {
                 let string = fs::read_to_string(&path)?;
                 let bytes = string.as_bytes();
-                let (c, ranges) = count_file_code(bytes)?;
-                let parsed_path = remove_data_prefix(path.to_str().unwrap());
-                ranges_to_remove.0.insert(parsed_path, ranges);
+                let c = count_file_code(bytes)?;
                 count += c;
             }
         }
@@ -111,19 +101,17 @@ fn count_dir_code(
 pub fn count_crates_code(
     state: &mut ScraperState,
     results: &mut AnalyzisResults,
-) -> Result<RangesToRemove, Box<dyn Error>> {
+) -> Result<(), Box<dyn Error>> {
     if state.counted_code_at.is_some() {
-        if let Some(ranges_to_remove) = RangesToRemove::load() {
-            pretty_print(
-                "Characters and lines already counted at",
-                Some(&state.counted_code_at),
-            );
-            return Ok(ranges_to_remove);
-        }
+        pretty_print(
+            "Characters and lines already counted at",
+            Some(&state.counted_code_at),
+        );
+        return Ok(());
     }
-    let mut ranges_to_remove = RangesToRemove::load().unwrap_or_default();
+    println!("ue");
     for crate_path in results.crates.clone().keys() {
-        match count_dir_code(Path::new(&crate_path), &mut ranges_to_remove) {
+        match count_dir_code(&Path::new("./data/parsed_repos").join(crate_path)) {
             Ok(c) => {
                 results.update_crate(crate_path, &mut |crate_analyzis| {
                     crate_analyzis.source_count = Some(c);
@@ -143,11 +131,12 @@ pub fn count_crates_code(
         }
     }
 
-    ranges_to_remove.save()?;
     pretty_print("Characters and lines counted", None);
     state.counted_code_at = Some(Local::now());
     state.save()?;
-    Ok(ranges_to_remove)
+    results.save()?;
+    println!("{:?}", results);
+    Ok(())
 }
 
 pub fn count_expanded_code(
@@ -164,17 +153,19 @@ pub fn count_expanded_code(
 
     for crate_path in results.crates.clone().keys() {
         let repo_path = get_repo_path(crate_path);
-        let expanded_path = Path::new(&crate_path).join(".macro-expanded.rs");
+        let expanded_path = Path::new("./data/parsed_repos")
+            .join(crate_path)
+            .join(".macro-expanded.rs");
         let count = match fs::read_to_string(&expanded_path) {
             Ok(string) => {
                 let bytes = string.as_bytes();
-                count_file_code(bytes)?.0
+                count_file_code(bytes)?
             }
             Err(_) => CharLineCount(0, 0),
         };
         results.update_crate(crate_path, &mut |crate_analyzis| {
+            println!("crate_analyzis: {:?}", crate_analyzis);
             if crate_analyzis.expanded_count.is_none() {
-                crate_analyzis.expanded_count = Some(Ok(count));
                 crate_analyzis.expanded_count = Some(Ok(count));
             }
         });
@@ -195,5 +186,7 @@ pub fn count_expanded_code(
 
     pretty_print("Expanded characters and lines counted", None);
     state.counted_expanded_chars_at = Some(Local::now());
+    results.save()?;
+    state.save()?;
     Ok(())
 }

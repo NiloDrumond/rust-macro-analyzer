@@ -2,7 +2,7 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fs};
 
-use crate::{state::ScraperState, utils::pretty_print};
+use crate::{state::ScraperState, utils::{pretty_print, remove_data_prefix}};
 const CRATE_PATHS_PATH: &str = "./data/crates.ron";
 
 #[derive(Deserialize, Default)]
@@ -41,7 +41,7 @@ impl_save_load!(CratePaths, CRATE_PATHS_PATH);
 
 pub fn get_repo_path(crate_path: &str) -> String {
     let path_parts: Vec<&str> = crate_path.split('/').collect();
-    let repo_path = &path_parts[0..4].join("/");
+    let repo_path = &path_parts[0..1].join("/");
     repo_path.to_string()
 }
 
@@ -61,7 +61,7 @@ pub fn find_project_crates(root_dir: &std::path::Path) -> CratePaths {
     // Check if the root directory is a crate or a workspace
     if cargo_toml.workspace.is_none() {
         // If it's a crate, add its path to the CratePaths vector
-        crate_paths.push(root_dir.to_string_lossy().to_string());
+        crate_paths.push(remove_data_prefix(&root_dir.to_string_lossy()));
     } else {
         // If it's a workspace, read the members field to get the paths to the crates inside that workspace
         if let Some(workspace) = &cargo_toml.workspace {

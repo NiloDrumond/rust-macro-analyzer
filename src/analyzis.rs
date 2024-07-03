@@ -5,8 +5,9 @@ use crate::{
     error::{Error, ErrorMessage},
     results::AnalyzisResults,
     state::ScraperState,
-    utils::{parse_file, BUILTIN_ATTRIBUTES, FOLDERS_TO_IGNORE},
+    utils::{parse_file, pretty_print, BUILTIN_ATTRIBUTES, FOLDERS_TO_IGNORE},
 };
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use tree_sitter::Node;
 
@@ -237,10 +238,18 @@ fn count_dir_macro_usage(path: &Path) -> Result<MacroAnalyzis, Error> {
 pub fn analyze_crates(
     state: &mut ScraperState,
     results: &mut AnalyzisResults,
-) -> Result<(), Error> {
+) -> Result<(), Box<dyn std::error::Error>> {
+    if state.analyzed_macros_at.is_some() {
+        pretty_print(
+            "Macros already analyzed at",
+            Some(&state.analyzed_macros_at),
+        );
+        return Ok(());
+    }
+
     for crate_path in results.crates.clone().keys() {
         let repo_path = get_repo_path(crate_path);
-        let analyzis = count_dir_macro_usage(Path::new(&crate_path))?;
+        let analyzis = count_dir_macro_usage(&Path::new("./data/repos").join(crate_path))?;
 
         results.update_crate(crate_path, &mut |crate_analyzis| {
             crate_analyzis.macro_usage = Some(analyzis.clone());
@@ -251,5 +260,8 @@ pub fn analyze_crates(
         })
     }
 
+    state.analyzed_macros_at = Some(Local::now());
+    state.save()?;
+    pretty_print("Macros analyzed", None);
     Ok(())
 }

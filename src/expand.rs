@@ -5,11 +5,12 @@ use chrono::Local;
 use std::{error::Error, path::Path, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
 use tokio::{io::AsyncWriteExt, sync::Semaphore};
 
-const WORKER_POOL_SIZE: usize = 20;
+const WORKER_POOL_SIZE: usize = 30;
 
 async fn expand_crate(path: String) -> Result<(), String> {
-    let cargo_path = Path::new(&path).join("Cargo.toml");
-    let output_path = Path::new(&path).join(".macro-expanded.rs");
+    let crate_path = Path::new("./data/parsed_repos").join(path);
+    let cargo_path = crate_path.join("Cargo.toml");
+    let output_path = crate_path.join(".macro-expanded.rs");
 
     let output = tokio::process::Command::new("cargo")
         .arg("+nightly")
