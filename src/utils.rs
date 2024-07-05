@@ -2,6 +2,12 @@ use std::fmt::Debug;
 
 use tree_sitter::{Parser, Tree};
 
+const DATA_PATH: &str = "./data";
+
+pub fn create_data_folder() {
+    std::fs::create_dir_all(DATA_PATH).unwrap();
+}
+
 pub fn parse_file(bytes: &[u8]) -> Tree {
     let mut parser = Parser::new();
     parser

@@ -1,26 +1,45 @@
 use crate::{
-    crate_paths::get_repo_path, results::AnalyzisResults, state::ScraperState, utils::pretty_print,
+    cargo::CargoToml, crate_paths::get_repo_path, results::AnalyzisResults, state::ScraperState,
+    utils::pretty_print,
 };
 use chrono::Local;
-use std::{error::Error, path::Path, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
-use tokio::{io::AsyncWriteExt, sync::Semaphore};
+use std::{
+    error::Error,
+    path::Path,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
+use tokio::{fs, io::AsyncWriteExt, sync::Semaphore};
 
-const WORKER_POOL_SIZE: usize = 30;
+const WORKER_POOL_SIZE: usize = 10;
 
-async fn expand_crate(path: String) -> Result<(), String> {
-    let crate_path = Path::new("./data/parsed_repos").join(path);
+pub async fn expand_crate(path: String) -> Result<(), String> {
+    let crate_path = Path::new("./data/repos").join(path);
     let cargo_path = crate_path.join("Cargo.toml");
-    let output_path = crate_path.join(".macro-expanded.rs");
 
-    let output = tokio::process::Command::new("cargo")
-        .arg("+nightly")
-        .arg("expand")
-        // .arg("--no-default-features")
-        .arg("--manifest-path")
-        .arg(&cargo_path)
-        .output()
+    let cargo_toml = fs::read_to_string(cargo_path.clone())
         .await
         .map_err(|e| e.to_string())?;
+    let cargo_toml: CargoToml = toml::from_str(&cargo_toml).unwrap_or_default();
+
+    let output_path = crate_path.join(".macro-expanded.rs");
+
+    let mut command = tokio::process::Command::new("cargo");
+    command
+        .env("RUSTUP_TOOLCHAIN", "nightly")
+        .arg("+nightly")
+        .arg("expand")
+        .arg("--no-default-features")
+        .arg("--manifest-path")
+        .arg(&cargo_path);
+
+    if cargo_toml.lib.is_some() {
+        command.arg("--lib");
+    }
+
+    let output = command.output().await.map_err(|e| e.to_string())?;
 
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).into());
@@ -55,15 +74,16 @@ pub async fn expand_crates(
     }
 
     let semaphore = Arc::new(Semaphore::new(WORKER_POOL_SIZE));
-
     let counter = Arc::new(AtomicUsize::new(0));
     let crates = results.crates.keys().cloned();
+
     let tasks: Vec<_> = crates
         .map(|path| {
             let semaphore_clone = semaphore.clone();
             let counter_clone = counter.clone();
 
             async move {
+                println!("Acquiring permit");
                 let _permit = semaphore_clone
                     .acquire()
                     .await
@@ -96,6 +116,7 @@ pub async fn expand_crates(
 
     state.expanded_macros_at = Some(Local::now());
     state.save()?;
+    results.save()?;
     pretty_print("Macros expanded", None);
     Ok(())
 }

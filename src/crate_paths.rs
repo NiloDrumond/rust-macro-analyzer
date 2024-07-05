@@ -2,18 +2,9 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fs};
 
-use crate::{state::ScraperState, utils::{pretty_print, remove_data_prefix}};
+use crate::{cargo::CargoToml, state::ScraperState, utils::{pretty_print, remove_data_prefix}};
 const CRATE_PATHS_PATH: &str = "./data/crates.ron";
 
-#[derive(Deserialize, Default)]
-struct CargoTomlWorkspace {
-    members: Vec<String>,
-}
-
-#[derive(Deserialize, Default)]
-struct CargoToml {
-    workspace: Option<CargoTomlWorkspace>,
-}
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct CratePaths(pub Vec<String>);

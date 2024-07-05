@@ -11,7 +11,6 @@ use tree_sitter::{Node, Parser};
 
 use crate::{
     crate_paths::CratePaths,
-    results::AnalyzisResults,
     state::ScraperState,
     utils::{pretty_print, remove_data_prefix},
 };
@@ -31,6 +30,34 @@ impl From<tree_sitter::Range> for Range {
 pub struct RangesToRemove(pub HashMap<String, Vec<Range>>);
 
 impl_save_load!(RangesToRemove, RANGES_TO_REMOVE_PATH);
+
+fn validate_cfg(token_tree: Node, bytes: &[u8]) -> bool {
+    // Checking for the format: "(not(feature = "feat"))"
+    if token_tree.child_count() == 4 {
+        let (identifier, tree) = match (token_tree.child(1), token_tree.child(2)) {
+            (Some(identifier), Some(tree)) => (identifier, tree),
+            _ => return false,
+        };
+        let identifier = &bytes[identifier.byte_range()];
+        let identifier = String::from_utf8(identifier.to_vec()).unwrap();
+        if identifier != "not" {
+            return false;
+        }
+        // Looking for "(" "feature" "=" ""featname"" ")"
+        if tree.child_count() == 5 {
+            let identifier = match tree.child(1) {
+                Some(identifier) => identifier,
+                None => return false,
+            };
+            let identifier = &bytes[identifier.byte_range()];
+            let identifier = String::from_utf8(identifier.to_vec()).unwrap();
+            if identifier == "feature" {
+                return true;
+            }
+        }
+    }
+    false
+}
 
 fn get_node_cfg_ranges(root: Node, bytes: &[u8]) -> Vec<Range> {
     let mut ranges_to_remove: Vec<Range> = vec![];
@@ -57,8 +84,20 @@ fn get_node_cfg_ranges(root: Node, bytes: &[u8]) -> Vec<Range> {
 
             // TODO: tratar esse caso:
             // https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg-macro
-            if value == "cfg" || value == "cfg_attr" {
+            if value == "cfg" {
+                let token_tree = match attribute.child(1) {
+                    Some(token_tree) => token_tree,
+                    None => continue,
+                };
+                let valid = validate_cfg(token_tree, bytes);
+                if valid {
+                    continue;
+                }
                 ignore_next = true;
+                ranges_to_remove.push(node.range().into());
+                continue;
+            }
+            if value == "cfg_attr" {
                 ranges_to_remove.push(node.range().into());
                 continue;
             }
@@ -88,6 +127,12 @@ pub fn get_file_cfg_ranges(bytes: &[u8]) -> Result<Vec<Range>, Box<dyn Error>> {
         }
         None => Err("Failed to parse file".into()),
     }
+}
+
+pub fn test_cfg() {
+    let bytes = fs::read("./test.rs").unwrap();
+    let ranges = get_file_cfg_ranges(&bytes).unwrap();
+    println!("ranges: {:?}", ranges);
 }
 
 fn get_cfg_ranges(
@@ -207,7 +252,7 @@ pub fn clear_conditional_compilation(
     if state.cleared_cfg_at.is_some() {
         pretty_print(
             "Repositories already parsed at",
-            Some(&state.expanded_macros_at),
+            Some(&state.cleared_cfg_at),
         );
         return Ok(());
     }

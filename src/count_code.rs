@@ -17,28 +17,6 @@ fn count_chars(root: Node, bytes: &[u8]) -> usize {
             ignore_next = false;
             continue;
         }
-
-        if let "attribute_item" = node.kind() {
-            let attribute = node.child(2);
-            let attribute = match attribute {
-                Some(attribute) => attribute,
-                None => continue,
-            };
-            let identifier = match attribute.child(0) {
-                Some(identifier) => identifier,
-                None => continue,
-            };
-            let value = &bytes[identifier.byte_range()];
-            let value = String::from_utf8(value.to_vec()).unwrap();
-
-            // TODO: tratar esse caso:
-            // https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg-macro
-            if value == "cfg" || value == "cfg_attr" {
-                ignore_next = true;
-                continue;
-            }
-        }
-
         let range = node.range();
         if range.end_point.row == range.start_point.row {
             let value = &bytes[node.byte_range()];
@@ -109,7 +87,6 @@ pub fn count_crates_code(
         );
         return Ok(());
     }
-    println!("ue");
     for crate_path in results.crates.clone().keys() {
         match count_dir_code(&Path::new("./data/parsed_repos").join(crate_path)) {
             Ok(c) => {

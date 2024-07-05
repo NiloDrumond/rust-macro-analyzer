@@ -7,6 +7,7 @@ use github::clone_repos;
 use github::get_most_popular_repos;
 use results::AnalyzisResults;
 use state::ScraperState;
+use utils::create_data_folder;
 use std::error::Error;
 use std::path::Path;
 
@@ -19,15 +20,10 @@ mod crate_paths;
 mod error;
 mod expand;
 mod github;
-mod lines_count;
 mod results;
 mod state;
+mod cargo;
 
-const DATA_PATH: &str = "./data";
-
-fn create_data_folder() {
-    std::fs::create_dir_all(DATA_PATH).unwrap();
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -38,11 +34,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let crate_paths = find_crate_paths(&mut state, Path::new(&repos_path))?;
     let mut results = AnalyzisResults::load().unwrap_or(AnalyzisResults::from(&crate_paths));
     results.save()?;
+    analyze_crates(&mut state, &mut results)?;
     clear_conditional_compilation(&mut state, &crate_paths)?;
     count_crates_code(&mut state, &mut results)?;
     expand_crates(&mut state, &mut results).await?;
     count_expanded_code(&mut state, &mut results)?;
-    analyze_crates(&mut state, &mut results)?;
     results.save()?;
     state.save()?;
     Ok(())
