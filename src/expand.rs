@@ -3,6 +3,7 @@ use crate::{
     utils::pretty_print,
 };
 use chrono::Local;
+use futures::future::join_all;
 use std::{
     error::Error,
     path::Path,
@@ -11,7 +12,7 @@ use std::{
         Arc,
     },
 };
-use tokio::{fs, io::AsyncWriteExt, sync::Semaphore};
+use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, task};
 
 const WORKER_POOL_SIZE: usize = 10;
 
@@ -22,7 +23,8 @@ pub async fn expand_crate(path: String) -> Result<(), String> {
     let cargo_toml = fs::read_to_string(cargo_path.clone())
         .await
         .map_err(|e| e.to_string())?;
-    let cargo_toml: CargoToml = toml::from_str(&cargo_toml).unwrap_or_default();
+    let cargo_toml: CargoToml =
+        toml::from_str(&cargo_toml).map_err(|e| format!("Failed to load Cargo.toml: {}", e))?;
 
     let output_path = crate_path.join(".macro-expanded.rs");
 
@@ -37,6 +39,11 @@ pub async fn expand_crate(path: String) -> Result<(), String> {
 
     if cargo_toml.lib.is_some() {
         command.arg("--lib");
+    } else if let Some(bin_entries) = cargo_toml.bin {
+        if let Some(first_bin) = bin_entries.first() {
+            command.arg("--bin");
+            command.arg(first_bin.name.clone());
+        }
     }
 
     let output = command.output().await.map_err(|e| e.to_string())?;
@@ -63,7 +70,7 @@ async fn expand_crate_task(path: String) -> (String, Result<(), String>) {
 
 pub async fn expand_crates(
     state: &mut ScraperState,
-    results: &mut AnalyzisResults,
+    analyzis_results: &mut AnalyzisResults,
 ) -> Result<(), Box<dyn Error>> {
     if state.expanded_macros_at.is_some() {
         pretty_print(
@@ -75,48 +82,58 @@ pub async fn expand_crates(
 
     let semaphore = Arc::new(Semaphore::new(WORKER_POOL_SIZE));
     let counter = Arc::new(AtomicUsize::new(0));
-    let crates = results.crates.keys().cloned();
+    let crates = analyzis_results.crates.keys().cloned().collect::<Vec<_>>();
 
     let tasks: Vec<_> = crates
+        .into_iter()
         .map(|path| {
             let semaphore_clone = semaphore.clone();
             let counter_clone = counter.clone();
+            let path_string = path.to_string();
 
-            async move {
-                println!("Acquiring permit");
+            task::spawn(async move {
                 let _permit = semaphore_clone
                     .acquire()
                     .await
                     .unwrap_or_else(|_| panic!("Failed to acquire permit"));
                 let count = counter_clone.fetch_add(1, Ordering::Relaxed);
                 pretty_print("Expanded crates", Some(&count));
-                pretty_print("Expanding crate", Some(&path.to_string()));
-                expand_crate_task(path.to_string()).await
-            }
+                pretty_print("Expanding crate", Some(&path_string));
+                expand_crate_task(path_string).await
+            })
         })
         .collect();
 
-    for task in tasks {
-        let result = task.await;
-        if let Err(err) = result.1 {
-            results.update_crate(&result.0, &mut |crate_analyzis| {
-                crate_analyzis.expanded_count = Some(Err(err.to_string()));
-            });
+    let results = join_all(tasks).await;
 
-            let repo_path = get_repo_path(&result.0);
-            results.update_repo(&repo_path, &mut |repo_analyzis| {
-                if let Some(Err(prev)) = repo_analyzis.expanded_count {
-                    repo_analyzis.expanded_count = Some(Err(prev + 1));
-                } else {
-                    repo_analyzis.expanded_count = Some(Err(1));
+    for result in results {
+        match result {
+            Ok((crate_path, expand_result)) => {
+                if let Err(err) = expand_result {
+                    analyzis_results.update_crate(&crate_path, &mut |crate_analyzis| {
+                        crate_analyzis.expanded_count = Some(Err(err.to_string()));
+                    });
+
+                    let repo_path = get_repo_path(&crate_path);
+                    analyzis_results.update_repo(&repo_path, &mut |repo_analyzis| {
+                        if let Some(Err(prev)) = repo_analyzis.expanded_count {
+                            repo_analyzis.expanded_count = Some(Err(prev + 1));
+                        } else {
+                            repo_analyzis.expanded_count = Some(Err(1));
+                        }
+                    });
                 }
-            })
+            }
+            Err(e) => {
+                // Handle the join error (e.g., task was cancelled or panicked)
+                eprintln!("Task join error: {:?}", e);
+            }
         }
     }
 
     state.expanded_macros_at = Some(Local::now());
     state.save()?;
-    results.save()?;
+    analyzis_results.save()?;
     pretty_print("Macros expanded", None);
     Ok(())
 }

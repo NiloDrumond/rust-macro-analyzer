@@ -3,6 +3,11 @@ use std::fmt;
 use serde::{de::{self, MapAccess, Visitor}, Deserialize, Deserializer};
 
 #[derive(Deserialize, Default, Debug)]
+pub struct CargoTomlBinEntry {
+    pub name: String,
+}
+
+#[derive(Deserialize, Default, Debug)]
 pub struct CargoTomlWorkspace {
     pub members: Vec<String>,
 }
@@ -47,4 +52,5 @@ impl<'de> Deserialize<'de> for LibExists {
 pub struct CargoToml {
     pub workspace: Option<CargoTomlWorkspace>,
     pub lib: Option<LibExists>,
+    pub bin: Option<Vec<CargoTomlBinEntry>>
 }
