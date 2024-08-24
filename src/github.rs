@@ -16,14 +16,14 @@ const GRAPHQL_URL: &str = "https://api.github.com/graphql";
 const USER_AGENT: &str = "NiloDrumond (https://github.com/NiloDrumond)";
 const REPOS_PATH: &str = "./data/repos.ron";
 const CLONED_REPOS_PATH: &str = "./data/repos";
-const REPOS_TO_FETCH: i64 = 10;
+const REPOS_TO_FETCH: i64 = 100;
 
 const WORKER_POOL_SIZE: usize = 30;
 
 #[allow(clippy::upper_case_acronyms)]
 type URI = String;
 
-type Repository = repos_query::ReposQuerySearchNodesOnRepository;
+pub type Repository = repos_query::ReposQuerySearchNodesOnRepository;
 
 #[derive(GraphQLQuery)]
 #[graphql(
@@ -119,15 +119,14 @@ pub async fn get_most_popular_repos(
     Ok(repos)
 }
 
-async fn clone_repo(repository: Repository) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn clone_repo(repository: &Repository) -> Result<(), Box<dyn Error + Send + Sync>> {
     let output_folder_name = format!("{}.{}", repository.owner.login, repository.name);
     let path = Path::new(CLONED_REPOS_PATH).join(output_folder_name);
     let output = tokio::process::Command::new("git")
         .arg("clone")
-        // https://stackoverflow.com/questions/3796927/how-do-i-git-clone-a-repo-including-its-submodules
         .arg("--recurse-submodules")
         .arg("-j8")
-        .arg(repository.url)
+        .arg(repository.url.clone())
         .arg(path)
         .stdout(std::io::stdout())
         .output()
@@ -141,7 +140,7 @@ async fn clone_repo(repository: Repository) -> Result<(), Box<dyn Error + Send +
 
 pub async fn clone_repos(
     state: &mut ScraperState,
-    repositories: Vec<Repository>,
+    repositories: &[Repository],
 ) -> Result<String, Box<dyn Error>> {
     if state.cloned_repos_at.is_some() {
         pretty_print("Repos already cloned at", Some(&state.cloned_repos_at));
@@ -151,7 +150,7 @@ pub async fn clone_repos(
     let semaphore = Arc::new(Semaphore::new(WORKER_POOL_SIZE));
 
     let tasks: Vec<_> = repositories
-        .into_iter()
+        .iter()
         .map(|repository| {
             let semaphore_clone = semaphore.clone();
 

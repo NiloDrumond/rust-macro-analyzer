@@ -3,6 +3,9 @@ name = "rust-macros-scraper"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+expand = []
+
 [dependencies]
 tokio = { version = "1.37.0", features = ["full"] }
 reqwest = { version = "0.12.4", features = ['json'] }
@@ -15,6 +18,11 @@ tree-sitter = { version = "0.22.6" }
 tree-sitter-rust = { version = "0.21.2" }
 glob = "0.3.1"
 futures = { version = "0.3.30" }
+plotters = "0.3.6"
+serde_json = "1.0.124"
+ts-rs = "9.0.1"
+tide = "0.16.0"
+async-std = "1.12.0"
 
 [build-dependencies]
 cc = "*"

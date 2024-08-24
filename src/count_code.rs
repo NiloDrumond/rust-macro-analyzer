@@ -88,7 +88,7 @@ pub fn count_crates_code(
         return Ok(());
     }
     for crate_path in results.crates.clone().keys() {
-        match count_dir_code(&Path::new("./data/parsed_repos").join(crate_path)) {
+        match count_dir_code(&Path::new("./data/repos").join(crate_path)) {
             Ok(c) => {
                 results.update_crate(crate_path, &mut |crate_analyzis| {
                     crate_analyzis.source_count = Some(c);
@@ -112,7 +112,6 @@ pub fn count_crates_code(
     state.counted_code_at = Some(Local::now());
     state.save()?;
     results.save()?;
-    println!("{:?}", results);
     Ok(())
 }
 
@@ -141,7 +140,6 @@ pub fn count_expanded_code(
             Err(_) => CharLineCount(0, 0),
         };
         results.update_crate(crate_path, &mut |crate_analyzis| {
-            println!("crate_analyzis: {:?}", crate_analyzis);
             if crate_analyzis.expanded_count.is_none() {
                 crate_analyzis.expanded_count = Some(Ok(count));
             }

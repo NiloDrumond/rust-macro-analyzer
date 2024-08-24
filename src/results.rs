@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use ts_rs::TS;
 
 use crate::{
     analyzis::MacroAnalyzis,
     crate_paths::{get_repo_path, CratePaths},
+    github::Repository,
 };
 
 const RESULTS_PATH: &str = "./data/analyzis.ron";
@@ -11,7 +13,7 @@ const RESULTS_PATH: &str = "./data/analyzis.ron";
 type RepoPath = String;
 type CratePath = String;
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, Copy)]
+#[derive(TS, Serialize, Deserialize, Default, Debug, Clone, Copy)]
 // (Characters, Lines)
 pub struct CharLineCount(pub usize, pub usize);
 impl std::ops::AddAssign for CharLineCount {
@@ -29,30 +31,32 @@ impl std::ops::Add for CharLineCount {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 pub struct CrateAnalyzis {
     pub source_count: Option<CharLineCount>,
     pub expanded_count: Option<Result<CharLineCount, String>>,
     pub macro_usage: Option<MacroAnalyzis>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 pub struct RepoAnalyzis {
     pub path: RepoPath,
     pub crates_count: usize,
     pub source_count: Option<CharLineCount>,
     pub expanded_count: Option<Result<CharLineCount, usize>>,
     pub macro_usage: Option<MacroAnalyzis>,
+    pub star_count: i64,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(TS, Serialize, Deserialize, Default, Debug)]
+#[ts(export)]
 pub struct AnalyzisResults {
     pub crates: HashMap<CratePath, CrateAnalyzis>,
     pub repos: HashMap<RepoPath, RepoAnalyzis>,
 }
 
-impl From<&CratePaths> for AnalyzisResults {
-    fn from(paths: &CratePaths) -> Self {
+impl From<(&CratePaths, &Vec<Repository>)> for AnalyzisResults {
+    fn from((paths, repos_query): (&CratePaths, &Vec<Repository>)) -> Self {
         let mut crates = HashMap::new();
         let mut repos: HashMap<String, RepoAnalyzis> = HashMap::new();
         for path in paths {
@@ -65,7 +69,19 @@ impl From<&CratePaths> for AnalyzisResults {
             let repo_path = get_repo_path(path);
             let mut repo_analyzis = match repos.get(&repo_path) {
                 Some(repo_analyzis) => repo_analyzis.clone(),
-                None => RepoAnalyzis::default(),
+                None => RepoAnalyzis {
+                    star_count: repos_query
+                        .iter()
+                        .find(|repository| {
+                            let folder_name =
+                                format!("{}.{}", repository.owner.login, repository.name);
+                            folder_name == repo_path
+                        })
+                        .unwrap()
+                        .stargazers
+                        .total_count,
+                    ..Default::default()
+                },
             };
             repo_analyzis.path = repo_path.to_string();
             repo_analyzis.crates_count += 1;

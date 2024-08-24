@@ -63,46 +63,49 @@ fn get_node_cfg_ranges(root: Node, bytes: &[u8]) -> Vec<Range> {
     let mut ranges_to_remove: Vec<Range> = vec![];
     let mut ignore_next = false;
     for node in root.children(&mut root.walk()) {
-        if ignore_next {
-            ranges_to_remove.push(node.range().into());
-            ignore_next = false;
-            continue;
-        }
+        {
+            if ignore_next {
+                ranges_to_remove.push(node.range().into());
+                ignore_next = false;
+                continue;
+            }
 
-        if let "attribute_item" = node.kind() {
-            let attribute = node.child(2);
-            let attribute = match attribute {
-                Some(attribute) => attribute,
-                None => continue,
-            };
-            let identifier = match attribute.child(0) {
-                Some(identifier) => identifier,
-                None => continue,
-            };
-            let value = &bytes[identifier.byte_range()];
-            let value = String::from_utf8(value.to_vec()).unwrap();
-
-            // TODO: tratar esse caso:
-            // https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg-macro
-            if value == "cfg" {
-                let token_tree = match attribute.child(1) {
-                    Some(token_tree) => token_tree,
+            if let "attribute_item" = node.kind() {
+                let attribute = node.child(2);
+                let attribute = match attribute {
+                    Some(attribute) => attribute,
                     None => continue,
                 };
-                let valid = validate_cfg(token_tree, bytes);
-                if valid {
+                let identifier = match attribute.child(0) {
+                    Some(identifier) => identifier,
+                    None => continue,
+                };
+                let value = &bytes[identifier.byte_range()];
+                let value = String::from_utf8(value.to_vec()).unwrap();
+
+                // TODO: tratar esse caso:
+                // https://doc.rust-lang.org/reference/conditional-compilation.html#the-cfg-macro
+                if value == "cfg" {
+                    let token_tree = match attribute.child(1) {
+                        Some(token_tree) => token_tree,
+                        None => continue,
+                    };
+                    let valid = validate_cfg(token_tree, bytes);
+                    if valid {
+                        continue;
+                    }
+                    ignore_next = true;
+                    ranges_to_remove.push(node.range().into());
                     continue;
                 }
-                ignore_next = true;
-                ranges_to_remove.push(node.range().into());
-                continue;
-            }
-            if value == "cfg_attr" {
-                ranges_to_remove.push(node.range().into());
-                continue;
+                if value == "cfg_attr" {
+                    ranges_to_remove.push(node.range().into());
+                    continue;
+                }
             }
         }
 
+        // Empty node = whitespace
         if node.child_count() > 0 {
             let ranges = get_node_cfg_ranges(node, bytes);
             ranges_to_remove.extend(ranges)
@@ -127,12 +130,6 @@ pub fn get_file_cfg_ranges(bytes: &[u8]) -> Result<Vec<Range>, Box<dyn Error>> {
         }
         None => Err("Failed to parse file".into()),
     }
-}
-
-pub fn test_cfg() {
-    let bytes = fs::read("./test.rs").unwrap();
-    let ranges = get_file_cfg_ranges(&bytes).unwrap();
-    println!("ranges: {:?}", ranges);
 }
 
 fn get_cfg_ranges(
@@ -245,7 +242,7 @@ fn parse_repositories(ranges_to_remove: &RangesToRemove) -> Result<(), Box<dyn E
     Ok(())
 }
 
-pub fn clear_conditional_compilation(
+pub fn parse_code(
     state: &mut ScraperState,
     crate_paths: &CratePaths,
 ) -> Result<(), Box<dyn Error>> {

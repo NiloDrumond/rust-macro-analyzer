@@ -10,8 +10,9 @@ use crate::{
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 use tree_sitter::Node;
+use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 struct DeriveMacroUsage {
     count: usize,
     avg: f64,
@@ -48,7 +49,7 @@ impl std::ops::Add for DeriveMacroUsage {
 }
 
 // https://doc.rust-lang.org/reference/attributes.html#built-in-attributes-index
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 struct AttributeMacroUsage(HashMap<String, usize>);
 
 impl AttributeMacroUsage {
@@ -82,7 +83,7 @@ impl std::ops::Add for AttributeMacroUsage {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 pub struct MacroAnalyzis {
     attribute_macro_definition_count: usize,
     declarative_macro_definition_count: usize,
