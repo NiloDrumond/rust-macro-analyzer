@@ -3,6 +3,7 @@ use analyzis::calculate_overall;
 use clear_cfg::parse_code;
 use count_code::{count_crates_code, count_expanded_code};
 use crate_paths::find_crate_paths;
+use data::Data;
 use expand::expand_crates;
 use github::clone_repos;
 use github::get_most_popular_repos;
@@ -50,14 +51,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // expand_crates(&mut state, &mut results).await?;
     // count_expanded_code(&mut state, &mut results)?;
 
-    calculate_overall(&mut results);
-
-    let serialized = serde_json::to_string(&results)?;
-    let mut file = std::fs::File::create("data/analyzis.json")?;
+    let data: Data = results.clone().into();
+    let serialized = serde_json::to_string(&data)?;
+    let mut file = std::fs::File::create("data/data.json")?;
     std::io::Write::write_all(&mut file, serialized.as_bytes())?;
     results.save()?;
     state.save()?;
 
-    start_server(results).await?;
+    start_server(data).await?;
     Ok(())
 }

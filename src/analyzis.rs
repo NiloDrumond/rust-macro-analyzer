@@ -55,6 +55,12 @@ impl std::ops::Add for DeriveMacroUsage {
 #[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 pub struct MacroUsage(pub HashMap<String, usize>);
 
+impl Into<u32> for MacroUsage {
+    fn into(self) -> u32 {
+        self.0.values().map(|&v| v as u32).sum()
+    }
+}
+
 impl MacroUsage {
     fn add_builtin(&mut self, value: &str) -> Option<()> {
         if value.starts_with("rustfmt::") || value.starts_with("clippy::") {
@@ -106,7 +112,9 @@ pub struct MacroAnalyzis {
     pub declarative_macro_definitions: MacroUsage,
     pub procedural_macro_definitions: MacroUsage,
     pub derive_macro_definitions: MacroUsage,
+
     pub derive_macro_usage: DeriveMacroUsage,
+
     pub attribute_macro_invocations: MacroUsage,
     pub builtin_attribute_macro_invocations: MacroUsage,
     pub macro_invocations: MacroUsage,

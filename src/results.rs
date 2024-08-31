@@ -54,8 +54,7 @@ pub struct OverallAnalyzis {
     pub macro_usage: Option<MacroAnalyzis>,
 }
 
-#[derive(TS, Serialize, Deserialize, Default, Debug)]
-#[ts(export)]
+#[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 pub struct AnalyzisResults {
     pub crates: HashMap<CratePath, CrateAnalyzis>,
     pub repos: HashMap<RepoPath, RepoAnalyzis>,

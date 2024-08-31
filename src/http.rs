@@ -6,10 +6,11 @@ use tide::security::Origin;
 use tide::Body;
 use tide::Request;
 
+use crate::data::Data;
 use crate::results::AnalyzisResults;
 use crate::utils::pretty_print;
 
-pub async fn start_server(results: AnalyzisResults) -> tide::Result<()> {
+pub async fn start_server(data: Data) -> tide::Result<()> {
     let mut app = tide::new();
 
     let cors = CorsMiddleware::new()
@@ -19,10 +20,10 @@ pub async fn start_server(results: AnalyzisResults) -> tide::Result<()> {
 
     app.with(cors);
 
-    let results = Arc::new(results);
+    let data = Arc::new(data);
 
     app.at("/data").get(move |_: Request<()>| {
-        let results = Arc::clone(&results);
+        let results = Arc::clone(&data);
         async move { Body::from_json(&results) }
     });
     pretty_print("HTTP Server started at port", Some(&"8080"));
