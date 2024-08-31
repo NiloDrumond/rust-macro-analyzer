@@ -1,4 +1,5 @@
 use analyzis::analyze_crates;
+use analyzis::calculate_overall;
 use clear_cfg::parse_code;
 use count_code::{count_crates_code, count_expanded_code};
 use crate_paths::find_crate_paths;
@@ -6,7 +7,6 @@ use expand::expand_crates;
 use github::clone_repos;
 use github::get_most_popular_repos;
 use http::start_server;
-use plot::plot;
 use results::AnalyzisResults;
 use state::ScraperState;
 use std::error::Error;
@@ -23,10 +23,10 @@ mod crate_paths;
 mod error;
 mod expand;
 mod github;
-mod plot;
 mod results;
 mod state;
 mod http;
+mod data;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -49,6 +49,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // count_crates_code(&mut state, &mut results)?;
     // expand_crates(&mut state, &mut results).await?;
     // count_expanded_code(&mut state, &mut results)?;
+
+    calculate_overall(&mut results);
 
     let serialized = serde_json::to_string(&results)?;
     let mut file = std::fs::File::create("data/analyzis.json")?;

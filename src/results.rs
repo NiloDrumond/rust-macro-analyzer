@@ -48,11 +48,18 @@ pub struct RepoAnalyzis {
     pub star_count: i64,
 }
 
+#[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
+pub struct OverallAnalyzis {
+    pub source_count: Option<CharLineCount>,
+    pub macro_usage: Option<MacroAnalyzis>,
+}
+
 #[derive(TS, Serialize, Deserialize, Default, Debug)]
 #[ts(export)]
 pub struct AnalyzisResults {
     pub crates: HashMap<CratePath, CrateAnalyzis>,
     pub repos: HashMap<RepoPath, RepoAnalyzis>,
+    pub overall: OverallAnalyzis,
 }
 
 impl From<(&CratePaths, &Vec<Repository>)> for AnalyzisResults {
@@ -87,7 +94,11 @@ impl From<(&CratePaths, &Vec<Repository>)> for AnalyzisResults {
             repo_analyzis.crates_count += 1;
             repos.insert(repo_path, repo_analyzis);
         }
-        Self { crates, repos }
+        Self {
+            crates,
+            repos,
+            overall: OverallAnalyzis::default(),
+        }
     }
 }
 

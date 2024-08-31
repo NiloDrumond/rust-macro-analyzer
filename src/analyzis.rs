@@ -5,7 +5,7 @@ use crate::{
     error::{Error, ErrorMessage},
     results::AnalyzisResults,
     state::ScraperState,
-    utils::{parse_file, pretty_print, BUILTIN_ATTRIBUTES, FOLDERS_TO_IGNORE},
+    utils::{parse_file, pretty_print, BUILTIN_ATTRIBUTES, FILES_TO_IGNORE, FOLDERS_TO_IGNORE},
 };
 use chrono::Local;
 use serde::{Deserialize, Serialize};
@@ -13,16 +13,18 @@ use tree_sitter::Node;
 use ts_rs::TS;
 
 #[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
-struct DeriveMacroUsage {
+pub struct DeriveMacroUsage {
     count: usize,
     avg: f64,
+    derives: MacroUsage,
 }
 
 impl DeriveMacroUsage {
-    pub fn add_point(&mut self, value: usize) {
-        let total_sum = self.avg * self.count as f64 + value as f64;
+    pub fn add_point(&mut self, derives: Vec<String>) {
+        let total_sum = self.avg * self.count as f64 + derives.len() as f64;
         self.count += 1;
         self.avg = total_sum / self.count as f64;
+        self.derives.add_multiple(derives);
     }
 }
 
@@ -37,22 +39,23 @@ impl std::ops::Add for DeriveMacroUsage {
             return self;
         }
         let new_count = self.count + rhs.count;
-
         let new_avg =
             ((self.avg * self.count as f64) + (rhs.avg * rhs.count as f64)) / new_count as f64;
+        let new_derives = self.derives + rhs.derives;
 
         Self {
             count: new_count,
             avg: new_avg,
+            derives: new_derives,
         }
     }
 }
 
 // https://doc.rust-lang.org/reference/attributes.html#built-in-attributes-index
 #[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
-struct AttributeMacroUsage(HashMap<String, usize>);
+pub struct MacroUsage(pub HashMap<String, usize>);
 
-impl AttributeMacroUsage {
+impl MacroUsage {
     fn add_builtin(&mut self, value: &str) -> Option<()> {
         if value.starts_with("rustfmt::") || value.starts_with("clippy::") {
             let prev = self.0.get("rustfmt::").unwrap_or(&0);
@@ -66,9 +69,23 @@ impl AttributeMacroUsage {
         }
         None
     }
+
+    fn add_multiple(&mut self, values: Vec<String>) {
+        for value in values.iter() {
+            let prev = self.0.get(value).unwrap_or(&0);
+            self.0.insert(value.to_string(), prev + 1);
+        }
+    }
 }
 
-impl std::ops::Add for AttributeMacroUsage {
+impl std::ops::AddAssign<&str> for MacroUsage {
+    fn add_assign(&mut self, value: &str) {
+        let prev = self.0.get(value).unwrap_or(&0);
+        self.0.insert(value.to_string(), prev + 1);
+    }
+}
+
+impl std::ops::Add for MacroUsage {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -85,14 +102,14 @@ impl std::ops::Add for AttributeMacroUsage {
 
 #[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 pub struct MacroAnalyzis {
-    attribute_macro_definition_count: usize,
-    declarative_macro_definition_count: usize,
-    procedural_macro_definition_count: usize,
-    derive_macro_definition_count: usize,
-    derive_macro_usage: DeriveMacroUsage,
-    attribute_macro_invocation_count: usize,
-    attribute_macro_usage: AttributeMacroUsage,
-    macro_invocation_count: usize,
+    pub attribute_macro_definitions: MacroUsage,
+    pub declarative_macro_definitions: MacroUsage,
+    pub procedural_macro_definitions: MacroUsage,
+    pub derive_macro_definitions: MacroUsage,
+    pub derive_macro_usage: DeriveMacroUsage,
+    pub attribute_macro_invocations: MacroUsage,
+    pub builtin_attribute_macro_invocations: MacroUsage,
+    pub macro_invocations: MacroUsage,
 }
 
 impl std::ops::Add for MacroAnalyzis {
@@ -100,21 +117,32 @@ impl std::ops::Add for MacroAnalyzis {
 
     fn add(self, rhs: Self) -> Self::Output {
         Self {
-            attribute_macro_usage: self.attribute_macro_usage + rhs.attribute_macro_usage,
-            declarative_macro_definition_count: self.declarative_macro_definition_count
-                + rhs.declarative_macro_definition_count,
-            derive_macro_definition_count: self.derive_macro_definition_count
-                + rhs.derive_macro_definition_count,
-            procedural_macro_definition_count: self.procedural_macro_definition_count
-                + rhs.procedural_macro_definition_count,
-            attribute_macro_invocation_count: self.attribute_macro_invocation_count
-                + rhs.attribute_macro_invocation_count,
-            attribute_macro_definition_count: self.attribute_macro_definition_count
-                + rhs.attribute_macro_definition_count,
+            builtin_attribute_macro_invocations: self.builtin_attribute_macro_invocations
+                + rhs.builtin_attribute_macro_invocations,
+            declarative_macro_definitions: self.declarative_macro_definitions
+                + rhs.declarative_macro_definitions,
+            derive_macro_definitions: self.derive_macro_definitions + rhs.derive_macro_definitions,
+            procedural_macro_definitions: self.procedural_macro_definitions
+                + rhs.procedural_macro_definitions,
+            attribute_macro_invocations: self.attribute_macro_invocations
+                + rhs.attribute_macro_invocations,
+            attribute_macro_definitions: self.attribute_macro_definitions
+                + rhs.attribute_macro_definitions,
             derive_macro_usage: self.derive_macro_usage + rhs.derive_macro_usage,
-            macro_invocation_count: self.macro_invocation_count + rhs.macro_invocation_count,
+            macro_invocations: self.macro_invocations + rhs.macro_invocations,
         }
     }
+}
+
+fn find_next_non_macro(node: Node) -> Option<Node> {
+    let next = match node.next_sibling() {
+        Some(next) => next,
+        None => return None,
+    };
+    if next.kind() == "attribute_item" {
+        return find_next_non_macro(next);
+    }
+    Some(next)
 }
 
 fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
@@ -127,12 +155,38 @@ fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
         }
 
         if node.kind() == "macro_definition" {
-            analyzis.declarative_macro_definition_count += 1;
+            let identifier = match node.child(1) {
+                Some(identifier) => identifier,
+                None => {
+                    return Err(Error {
+                        message: ErrorMessage::FailedToFindMacroIdentifier(
+                            node.range().start_point,
+                        ),
+                        path: None,
+                    });
+                }
+            };
+            let value = &bytes[identifier.byte_range()];
+            let value = String::from_utf8(value.to_vec()).unwrap();
+            analyzis.declarative_macro_definitions += &value;
         }
 
         // Invocation of function-like macros and declarative macros
         if node.kind() == "macro_invocation" {
-            analyzis.macro_invocation_count += 1;
+            let identifier = match node.child(0) {
+                Some(identifier) => identifier,
+                None => {
+                    return Err(Error {
+                        message: ErrorMessage::FailedToFindMacroIdentifier(
+                            node.range().start_point,
+                        ),
+                        path: None,
+                    });
+                }
+            };
+            let value = &bytes[identifier.byte_range()];
+            let value = String::from_utf8(value.to_vec()).unwrap();
+            analyzis.macro_invocations += &value;
         }
 
         // Handling attributes
@@ -149,22 +203,84 @@ fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
             let value = &bytes[identifier.byte_range()];
             let value = String::from_utf8(value.to_vec()).unwrap();
 
-            let is_builtin = analyzis.attribute_macro_usage.add_builtin(&value);
+            let is_builtin = analyzis
+                .builtin_attribute_macro_invocations
+                .add_builtin(&value);
             if is_builtin.is_none() {
-                analyzis.attribute_macro_invocation_count += 1;
+                analyzis.attribute_macro_invocations += &value;
             }
 
             // Checking for Attribute Macro definition
             if value == "proc_macro_attribute" {
-                analyzis.attribute_macro_definition_count += 1;
+                let next = match find_next_non_macro(node) {
+                    Some(next) => next,
+                    None => continue,
+                };
+                let identifier = match next
+                    .children(&mut next.walk())
+                    .find(|n| n.kind() == "identifier")
+                {
+                    Some(identifier) => identifier,
+                    None => {
+                        return Err(Error {
+                            message: ErrorMessage::FailedToFindMacroIdentifier(
+                                node.range().start_point,
+                            ),
+                            path: None,
+                        });
+                    }
+                };
+                let value = &bytes[identifier.byte_range()];
+                let value = String::from_utf8(value.to_vec()).unwrap();
+                analyzis.attribute_macro_definitions += &value;
             }
             // Checking for Function-like Macro definition
             if value == "proc_macro" {
-                analyzis.procedural_macro_definition_count += 1;
+                let next = match find_next_non_macro(node) {
+                    Some(next) => next,
+                    None => continue,
+                };
+                let identifier = match next
+                    .children(&mut next.walk())
+                    .find(|n| n.kind() == "identifier")
+                {
+                    Some(identifier) => identifier,
+                    None => {
+                        return Err(Error {
+                            message: ErrorMessage::FailedToFindMacroIdentifier(
+                                node.range().start_point,
+                            ),
+                            path: None,
+                        });
+                    }
+                };
+                let value = &bytes[identifier.byte_range()];
+                let value = String::from_utf8(value.to_vec()).unwrap();
+                analyzis.procedural_macro_definitions += &value;
             }
             // Checking for Derive Macro definition
             if value == "proc_macro_derive" {
-                analyzis.derive_macro_definition_count += 1;
+                let next = match find_next_non_macro(node) {
+                    Some(next) => next,
+                    None => continue,
+                };
+                let identifier = match next
+                    .children(&mut next.walk())
+                    .find(|n| n.kind() == "identifier")
+                {
+                    Some(identifier) => identifier,
+                    None => {
+                        return Err(Error {
+                            message: ErrorMessage::FailedToFindMacroIdentifier(
+                                node.range().start_point,
+                            ),
+                            path: None,
+                        });
+                    }
+                };
+                let value = &bytes[identifier.byte_range()];
+                let value = String::from_utf8(value.to_vec()).unwrap();
+                analyzis.derive_macro_definitions += &value;
             }
             // Check if its derive macro
             if value == "derive" {
@@ -177,11 +293,15 @@ fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
                         });
                     }
                 };
-                let derive_count = token_tree
+                let derives: Vec<String> = token_tree
                     .children(&mut token_tree.walk())
                     .filter(|n| n.kind() == "identifier")
-                    .count();
-                analyzis.derive_macro_usage.add_point(derive_count);
+                    .map(|identifier| {
+                        let value = &bytes[identifier.byte_range()];
+                        String::from_utf8(value.to_vec()).unwrap()
+                    })
+                    .collect();
+                analyzis.derive_macro_usage.add_point(derives);
             }
         }
         if node.child_count() > 0 {
@@ -195,7 +315,8 @@ fn count_macro_usage(root: Node, bytes: &[u8]) -> Result<MacroAnalyzis, Error> {
 
 fn count_dir_macro_usage(path: &Path) -> Result<MacroAnalyzis, Error> {
     let mut analyzis = MacroAnalyzis::default();
-    let ignore = FOLDERS_TO_IGNORE.map(std::ffi::OsStr::new);
+    let folders_to_ignore = FOLDERS_TO_IGNORE.map(std::ffi::OsStr::new);
+    let files_to_ignore = FILES_TO_IGNORE.map(std::ffi::OsStr::new);
     let entries = fs::read_dir(path).map_err(|_| Error {
         path: Some(path.display().to_string()),
         message: ErrorMessage::FailedToReadDirectory,
@@ -206,7 +327,7 @@ fn count_dir_macro_usage(path: &Path) -> Result<MacroAnalyzis, Error> {
         let name = entry.file_name();
 
         if path.is_dir() {
-            if ignore.iter().any(|v| *v == name) {
+            if folders_to_ignore.iter().any(|v| *v == name) {
                 continue;
             }
             let output = count_dir_macro_usage(&path)?;
@@ -215,9 +336,10 @@ fn count_dir_macro_usage(path: &Path) -> Result<MacroAnalyzis, Error> {
 
         let file_name = path.file_name();
         if let Some(file_name) = file_name {
-            if file_name != ".macro-expanded.rs"
-                && path.extension() == Some(std::ffi::OsStr::new("rs"))
-            {
+            if files_to_ignore.iter().any(|v| *v == file_name) {
+                continue;
+            }
+            if path.is_file() && path.extension() == Some(std::ffi::OsStr::new("rs")) {
                 match fs::read_to_string(&path) {
                     Ok(string) => {
                         let bytes = string.as_bytes();
@@ -234,6 +356,23 @@ fn count_dir_macro_usage(path: &Path) -> Result<MacroAnalyzis, Error> {
         }
     }
     Ok(analyzis)
+}
+
+pub fn calculate_overall(results: &mut AnalyzisResults) {
+    for repo in results.repos.values() {
+        results.overall.macro_usage = Some(
+            repo.macro_usage
+                .clone()
+                .expect("Expected repo to have macro_usage by here")
+                + results.overall.macro_usage.clone().unwrap_or_default(),
+        );
+        results.overall.source_count = Some(
+            results.overall.source_count.unwrap_or_default()
+                + repo
+                    .source_count
+                    .expect("Expected repo to have source count by here"),
+        );
+    }
 }
 
 pub fn analyze_crates(

@@ -1,3 +1,5 @@
+use tree_sitter::Point;
+
 #[derive(Clone, Debug)]
 pub struct Error {
     pub path: Option<String>,
@@ -8,6 +10,7 @@ pub struct Error {
 pub enum ErrorMessage {
     DeriveMacroExpectedTokenTree,
     FailedToReadDirectory,
+    FailedToFindMacroIdentifier(Point),
 }
 
 impl std::fmt::Display for Error {

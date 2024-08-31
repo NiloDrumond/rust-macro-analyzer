@@ -84,6 +84,7 @@ pub fn pretty_print(title: &str, description: Option<&dyn Debug>) {
 }
 
 pub const FOLDERS_TO_IGNORE: [&str; 2] = ["target", "malformed"];
+pub const FILES_TO_IGNORE: [&str; 2] = ["package_loader.rs", ".macro-expanded.rs"];
 pub const BUILTIN_ATTRIBUTES: [&str; 48] = [
     "cfg",
     "cfg_attr",
