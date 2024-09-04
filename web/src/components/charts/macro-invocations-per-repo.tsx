@@ -10,7 +10,7 @@ export function MacroInvocationsPerRepo() {
 
   const chartData = React.useMemo(() => {
     if (!data) return [];
-    return data.macro_definitions_per_repo
+    return data.macro_invocations_per_repo
       .map(([x, y]) => ({
         x,
         y,

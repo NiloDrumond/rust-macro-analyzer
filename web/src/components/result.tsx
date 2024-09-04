@@ -4,7 +4,10 @@ import { MacroDefinitionsPerRepo } from "./charts/macro-definitions-per-repo";
 import { MacroInvocationCountByType } from "./charts/macro-invocation-count-by-type";
 import { MacroInvocationsPerCrate } from "./charts/macro-invocations-per-crate";
 import { MacroInvocationsPerRepo } from "./charts/macro-invocations-per-repo";
-import { MostUsedBuiltinAttributeMacro } from "./charts/most-used-builtin-attribute-macros";
+import { MostUsedBuiltinAttributeMacros } from "./charts/most-used-builtin-attribute-macros";
+import { MostUsedCustomAttributeMacros } from "./charts/most-used-custom-attribute-macros";
+import { MostUsedDeriveMacros } from "./charts/most-used-derive-macros";
+import { MostUsedFunctionLikeAndDeclarativeMacros } from "./charts/most-used-function-declarative-macros";
 
 export function Results() {
   return (
@@ -19,7 +22,10 @@ export function Results() {
       </div>
       <MacroInvocationCountByType />
       <MacroDefinitionCountByType />
-      <MostUsedBuiltinAttributeMacro />
+      <MostUsedBuiltinAttributeMacros />
+      <MostUsedCustomAttributeMacros />
+      <MostUsedFunctionLikeAndDeclarativeMacros />
+      <MostUsedDeriveMacros />
       <MacroInvocationsPerRepo />
       <MacroDefinitionsPerRepo />
       <MacroInvocationsPerCrate />
