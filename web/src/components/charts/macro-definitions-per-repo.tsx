@@ -15,6 +15,7 @@ export function MacroDefinitionsPerRepo() {
         x,
         y,
       }))
+      .filter(({ y }) => y > 0)
       .sort((a, b) => b.y - a.y);
   }, [data]);
 

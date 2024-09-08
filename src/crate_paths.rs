@@ -2,9 +2,12 @@ use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fs};
 
-use crate::{cargo::CargoToml, state::ScraperState, utils::{pretty_print, remove_data_prefix}};
+use crate::{
+    cargo::CargoToml,
+    state::ScraperState,
+    utils::{pretty_print, remove_data_prefix},
+};
 const CRATE_PATHS_PATH: &str = "./data/crates.ron";
-
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct CratePaths(pub Vec<String>);
@@ -41,10 +44,18 @@ pub fn find_project_crates(root_dir: &std::path::Path) -> CratePaths {
 
     // Read the Cargo.toml file at the root directory
     let cargo_toml_path = root_dir.join("Cargo.toml");
-    let cargo_toml = match fs::read_to_string(cargo_toml_path) {
+    let cargo_toml = match fs::read_to_string(cargo_toml_path.clone()) {
         Ok(content) => content,
         Err(_no_file) => {
-            return CratePaths(vec![]);
+            for entry in fs::read_dir(root_dir).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+
+                if path.is_dir() {
+                    crate_paths.extend(find_project_crates(&path).0)
+                }
+            }
+            return CratePaths(crate_paths);
         }
     };
     let cargo_toml: CargoToml = toml::from_str(&cargo_toml).unwrap_or_default();

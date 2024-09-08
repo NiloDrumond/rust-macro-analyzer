@@ -14,16 +14,13 @@ use ts_rs::TS;
 
 #[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 pub struct DeriveMacroUsage {
-    count: usize,
-    avg: f64,
-    derives: MacroUsage,
+    pub derives_per_invocation: Vec<usize>,
+    pub derives: MacroUsage,
 }
 
 impl DeriveMacroUsage {
     pub fn add_point(&mut self, derives: Vec<String>) {
-        let total_sum = self.avg * self.count as f64 + derives.len() as f64;
-        self.count += 1;
-        self.avg = total_sum / self.count as f64;
+        self.derives_per_invocation.push(derives.len());
         self.derives.add_multiple(derives);
     }
 }
@@ -32,21 +29,10 @@ impl std::ops::Add for DeriveMacroUsage {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        if self.count == 0 {
-            return rhs;
-        }
-        if rhs.count == 0 {
-            return self;
-        }
-        let new_count = self.count + rhs.count;
-        let new_avg =
-            ((self.avg * self.count as f64) + (rhs.avg * rhs.count as f64)) / new_count as f64;
-        let new_derives = self.derives + rhs.derives;
-
         Self {
-            count: new_count,
-            avg: new_avg,
-            derives: new_derives,
+            derives_per_invocation: [self.derives_per_invocation, rhs.derives_per_invocation]
+                .concat(),
+            derives: self.derives + rhs.derives,
         }
     }
 }
@@ -55,9 +41,9 @@ impl std::ops::Add for DeriveMacroUsage {
 #[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
 pub struct MacroUsage(pub HashMap<String, usize>);
 
-impl Into<u32> for MacroUsage {
-    fn into(self) -> u32 {
-        self.0.values().map(|&v| v as u32).sum()
+impl From<MacroUsage> for u32 {
+    fn from(val: MacroUsage) -> Self {
+        val.0.values().map(|&v| v as u32).sum()
     }
 }
 

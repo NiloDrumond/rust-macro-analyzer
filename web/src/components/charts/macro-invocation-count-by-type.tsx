@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import { useData } from "../../hooks/use-data";
 import { Card } from "../ui/card";
+import { usageToCount } from "../../utils/data";
 
 const COLORS = ["#0ea5e9", "#22c55e", "#f97316", "#8b5cf6"];
 
@@ -21,23 +22,19 @@ export function MacroInvocationCountByType() {
     return [
       {
         name: "Derive Macros",
-        value: total.derive_macro_usage.count,
+        value: usageToCount(total.derive_macro_usage.derives),
       },
       {
         name: "Attribute Macros",
-        value: Object.values(total.attribute_macro_invocations).reduce(
-          (a, b) => a + b,
-        ),
+        value: usageToCount(total.attribute_macro_invocations),
       },
       {
         name: "Builtin Attribute Macros",
-        value: Object.values(total.builtin_attribute_macro_invocations).reduce(
-          (a, b) => a + b,
-        ),
+        value: usageToCount(total.builtin_attribute_macro_invocations),
       },
       {
         name: "Function-like and Declarative Macros",
-        value: Object.values(total.macro_invocations).reduce((a, b) => a + b),
+        value: usageToCount(total.macro_invocations),
       },
     ];
   }, [data]);
