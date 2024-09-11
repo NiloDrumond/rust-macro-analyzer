@@ -21,13 +21,13 @@ mod cargo;
 mod clear_cfg;
 mod count_code;
 mod crate_paths;
+mod data;
 mod error;
 mod expand;
 mod github;
+mod http;
 mod results;
 mod state;
-mod http;
-mod data;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -36,7 +36,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let repos = get_most_popular_repos(&mut state).await?;
     let repos_path = clone_repos(&mut state, &repos).await?;
     let crate_paths = find_crate_paths(&mut state, Path::new(&repos_path))?;
-    let mut results = AnalyzisResults::load().unwrap_or(AnalyzisResults::from((&crate_paths, &repos)));
+    let mut results =
+        AnalyzisResults::load().unwrap_or(AnalyzisResults::from((&crate_paths, &repos)));
     results.save()?;
     // Without expanded:
     analyze_crates(&mut state, &mut results)?;
@@ -51,7 +52,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // expand_crates(&mut state, &mut results).await?;
     // count_expanded_code(&mut state, &mut results)?;
 
-    let data: Data = results.clone().into();
+    let mut data: Data = results.clone().into();
+    data.date = state
+        .cloned_repos_at
+        .expect("Repositories should have been cloned by now");
     let serialized = serde_json::to_string(&data)?;
     let mut file = std::fs::File::create("data/data.json")?;
     std::io::Write::write_all(&mut file, serialized.as_bytes())?;

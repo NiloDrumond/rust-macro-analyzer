@@ -5,16 +5,20 @@ import { useData } from "../../hooks/use-data";
 import { getRepoName } from "../../utils/string";
 import { Card } from "../ui/card";
 
-export function MacroInvocationsPerRepo() {
+export function MacroInvocationsPerRepoLinesNormalized() {
   const { data } = useData();
 
   const chartData = React.useMemo(() => {
     if (!data) return [];
     return data.macro_invocations_per_repo
-      .map(([x, y]) => ({
-        x,
-        y,
-      }))
+      .map(([path, count]) => {
+        const lines = data.lines_per_repo[path];
+        const y = lines > 0 ? count / lines : 0;
+        return {
+          x: path,
+          y,
+        };
+      })
       .sort((a, b) => b.y - a.y);
   }, [data]);
 
@@ -59,7 +63,7 @@ export function MacroInvocationsPerRepo() {
 
   return (
     <Card>
-      <h2>Macro Invocations Per Repository</h2>
+      <h2>Macro Invocations Per Repository - Lines Normalized</h2>
 
       <ReactApexChart
         options={options}

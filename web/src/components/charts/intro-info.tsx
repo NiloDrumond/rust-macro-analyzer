@@ -2,6 +2,7 @@ import React from "react";
 import { useData } from "../../hooks/use-data";
 import { usageToCount } from "../../utils/data";
 import { Card } from "../ui/card";
+import { format } from "date-fns";
 
 export function IntroInfo() {
   const { data } = useData();
@@ -42,7 +43,7 @@ export function IntroInfo() {
         All data extracted from the 100 github rust repositories with most
         stargazers
       </p>
-      <p>As of: 23/08/2024</p>
+      <p>As of: {format(new Date(data?.date ?? 0), "P")}</p>
       <p>
         <strong>{crates}</strong> crates analyzed
       </p>

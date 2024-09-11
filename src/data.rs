@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
+use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
     analyzis::{DeriveMacroUsage, MacroAnalyzis, MacroUsage},
-    results::AnalyzisResults,
+    results::{AnalyzisResults, CharLineCount},
 };
 
 #[derive(TS, Serialize, Deserialize, Default, Debug, Clone)]
@@ -42,8 +43,13 @@ pub struct Data {
     macro_invocations_per_repo: Vec<(String, u32)>,
     macro_definitions_per_crate: Vec<(String, u32)>,
     macro_invocations_per_crate: Vec<(String, u32)>,
+    lines_per_repo: HashMap<String, usize>,
+    lines_per_crate: HashMap<String, usize>,
+    characters_per_repo: HashMap<String, usize>,
+    characters_per_crate: HashMap<String, usize>,
     derive_usage: DeriveUsage,
     total_macro_usage: MacroAnalyzis,
+    pub date: DateTime<Local>,
 }
 
 fn calculate_statistics(sorted_data: Vec<usize>) -> DeriveUsage {
@@ -53,7 +59,7 @@ fn calculate_statistics(sorted_data: Vec<usize>) -> DeriveUsage {
 
     // 1. Calculate average (as u32)
     let sum: usize = sorted_data.iter().sum();
-    let avg: f32  = (sum as f64 / sorted_data.len() as f64) as f32;
+    let avg: f32 = (sum as f64 / sorted_data.len() as f64) as f32;
 
     let median: f32 = if sorted_data.len() % 2 == 0 {
         // Average of the two middle values for even length
@@ -102,8 +108,15 @@ impl From<AnalyzisResults> for Data {
         let mut macro_invocations_by_type = MacroInvocationsByType::default();
         let mut macro_definitions_by_type = MacroDefinitionsByType::default();
 
+        let mut lines_per_repo = HashMap::new();
+        let mut lines_per_crate = HashMap::new();
+        let mut characters_per_repo = HashMap::new();
+        let mut characters_per_crate = HashMap::new();
+
         let mut macro_invocations_per_repo = vec![];
         let mut macro_definitions_per_repo = vec![];
+
+        let mut derives_per_invocation: Vec<usize> = vec![];
 
         for (path, repo) in value.repos.iter() {
             let macro_usage = repo
@@ -136,7 +149,24 @@ impl From<AnalyzisResults> for Data {
                 + macro_usage.declarative_macro_definitions)
                 .into();
             macro_definitions_per_repo.push((path.to_string(), macro_definitions));
+
+            let source_count = repo.source_count.unwrap_or(CharLineCount(0, 0));
+            characters_per_repo.insert(path.to_string(), source_count.0);
+            lines_per_repo.insert(path.to_string(), source_count.1);
+
+            derives_per_invocation = [
+                derives_per_invocation,
+                repo.macro_usage
+                    .clone()
+                    .expect("Expected repo to have macro_usage by then")
+                    .derive_macro_usage
+                    .derives_per_invocation,
+            ]
+            .concat();
         }
+
+        derives_per_invocation.sort();
+        let derive_usage = calculate_statistics(derives_per_invocation);
 
         let mut macro_invocations_per_crate = vec![];
         let mut macro_definitions_per_crate = vec![];
@@ -156,22 +186,11 @@ impl From<AnalyzisResults> for Data {
                 + macro_usage.declarative_macro_definitions)
                 .into();
             macro_definitions_per_crate.push((path.to_string(), macro_definitions));
-        }
-        let mut derives_per_invocation: Vec<usize> = vec![];
-        for repo in value.repos.values() {
-            derives_per_invocation = [
-                derives_per_invocation,
-                repo.macro_usage
-                    .clone()
-                    .expect("Expected repo to have macro_usage by then")
-                    .derive_macro_usage
-                    .derives_per_invocation,
-            ]
-            .concat();
-        }
 
-        derives_per_invocation.sort();
-        let derive_usage = calculate_statistics(derives_per_invocation);
+            let source_count = c.source_count.unwrap_or(CharLineCount(0, 0));
+            characters_per_crate.insert(path.to_string(), source_count.0);
+            lines_per_crate.insert(path.to_string(), source_count.1);
+        }
 
         let total_macro_usage = MacroAnalyzis {
             attribute_macro_definitions,
@@ -190,8 +209,12 @@ impl From<AnalyzisResults> for Data {
             macro_definitions_per_crate,
             macro_invocations_per_crate,
             derive_usage,
-            // macro_definitions_by_type,
-            // macro_invocations_by_type,
+            lines_per_repo,
+            lines_per_crate,
+            characters_per_repo,
+            characters_per_crate,
+            date: DateTime::default(), // macro_definitions_by_type,
+                                       // macro_invocations_by_type,
         }
     }
 }

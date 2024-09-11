@@ -17,6 +17,7 @@ function useDataController() {
     gcTime: Infinity,
     staleTime: Infinity,
   });
+  console.log(data);
 
   return { data };
 }

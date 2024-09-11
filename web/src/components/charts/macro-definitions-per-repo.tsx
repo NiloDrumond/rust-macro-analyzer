@@ -65,7 +65,7 @@ export function MacroDefinitionsPerRepo() {
       <ReactApexChart
         options={options}
         series={[{ data: chartData }]}
-        height={400}
+        height={800}
         type="treemap"
       />
     </Card>
