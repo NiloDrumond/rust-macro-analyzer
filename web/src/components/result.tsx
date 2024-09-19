@@ -1,5 +1,6 @@
 import { DeriveMacroUsage } from "./charts/derive-macro-usage";
 import { IntroInfo } from "./charts/intro-info";
+import { LinesPerRepo } from "./charts/lines-per-repository";
 import { MacroDefinitionCountByType } from "./charts/macro-definition-count-by-type";
 import { MacroDefinitionsPerCrate } from "./charts/macro-definitions-per-crate";
 import { MacroDefinitionsPerCrateLinesNormalized } from "./charts/macro-definitions-per-crate-lines-normalized";
@@ -35,6 +36,7 @@ export function Results() {
       <MacroDefinitionsPerCrate />
       <MacroInvocationsPerCrateLinesNormalized />
       <MacroDefinitionsPerCrateLinesNormalized />
+      <LinesPerRepo />
     </div>
   );
 }
